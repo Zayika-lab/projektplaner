@@ -141,6 +141,132 @@
   .status.ok .dot{background:#6e9b6a}
   .status.local .dot{background:#c9a961}
 
+  /* ===== Повзунок масштабу Gantt ===== */
+  .gantt-zoom{
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-sunk);
+    border-radius: 6px;
+  }
+  .gantt-zoom .zoom-ic{
+    color: var(--ink-4);
+    font-size: 11px;
+    width: 8px;
+    text-align: center;
+    user-select: none;
+  }
+  .gantt-zoom input[type=range]{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 110px;
+    height: 3px;
+    background: var(--line-strong);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  .gantt-zoom input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+    border: 0;
+  }
+  .gantt-zoom input[type=range]::-moz-range-thumb{
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+    border: 0;
+  }
+
+  /* ===== Інформація про користувача у верхній панелі ===== */
+  .user-info{
+    margin-left: auto;
+    display:flex; align-items:center; gap:8px;
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .user-info .avatar{
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--bg-sunk);
+    border: 1px solid var(--line);
+    object-fit: cover;
+  }
+  .user-info .uname{ max-width: 160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .user-info button{
+    border:1px solid var(--line);
+    border-radius: 5px;
+    padding: 4px 10px;
+    color: var(--ink-2);
+    transition: border-color .15s, background .15s;
+  }
+  .user-info button:hover{ border-color: var(--ink); background: var(--bg-soft) }
+
+  /* ===== Екран входу (оверлей) ===== */
+  .login-overlay{
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .login-overlay.show{ display: flex }
+  .login-card{
+    width: 380px;
+    padding: 40px 36px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--shadow-pop);
+    text-align: center;
+  }
+  .login-card h1{
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 32px;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  .login-card h1::first-letter{ font-style: normal }
+  .login-card p{
+    color: var(--ink-3);
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0 0 28px;
+  }
+  .google-btn{
+    display: inline-flex; align-items:center; gap:10px;
+    padding: 10px 18px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  .google-btn:hover{ border-color: var(--ink); background: var(--bg-soft); box-shadow: var(--shadow-soft) }
+  .google-btn svg{ width: 18px; height: 18px }
+  .login-hint{
+    margin-top: 20px;
+    font-size: 11px;
+    color: var(--ink-4);
+  }
+  .login-error{
+    margin-top: 14px;
+    padding: 8px 10px;
+    background: #fff3f0;
+    border: 1px solid #f0c4bb;
+    border-radius: 5px;
+    color: var(--danger);
+    font-size: 12px;
+    display: none;
+  }
+  .login-error.show{ display: block }
+
   /* ========== Views ========== */
   .views{ position:relative; overflow:hidden}
   .view{ position:absolute; inset:0; display:none; }
@@ -292,6 +418,26 @@
   .gantt-row.group-hdr.level-1 .row-label{ padding-left: 26px; font-weight:400 }
   .gantt-row.level-2 .row-label{ padding-left: 42px; color:var(--ink-3)}
   .gantt-row.level-1 .row-label{ padding-left: 26px}
+  /* Вкладені рівні (level-3, level-4...) — додатковий відступ на кожен рівень */
+  .gantt-row.level-3 .row-label{ padding-left: 58px; color:var(--ink-3) }
+  .gantt-row.level-4 .row-label{ padding-left: 74px; color:var(--ink-3) }
+  .gantt-row.level-5 .row-label{ padding-left: 90px; color:var(--ink-3) }
+  .gantt-row.level-6 .row-label{ padding-left: 106px; color:var(--ink-3) }
+
+  /* Стрілка згортання групи у Gantt */
+  .row-label .chev{
+    display: inline-block;
+    width: 12px;
+    margin-right: 4px;
+    cursor: pointer;
+    color: var(--ink-3);
+    font-size: 9px;
+    transition: transform .15s;
+    user-select: none;
+  }
+  .row-label .chev:hover{ color: var(--ink) }
+  .row-label .chev.off{ transform: rotate(-90deg) }
+  .row-label .chev-spacer{ display:inline-block; width: 16px }
 
   .gantt-bar{
     position: absolute;
@@ -332,6 +478,30 @@
   .gantt-bar:hover .dep-dot{ opacity: 1 }
   .gantt-bar .dep-dot.l{ left: -6px }
   .gantt-bar .dep-dot.r{ right: -6px }
+
+  /* Rollup-бар: автоматично охоплює діапазон усіх дочірніх задач */
+  .gantt-rollup{
+    position: absolute;
+    top: 12px;
+    height: calc(var(--row-h) - 22px);
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0.35;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+  }
+  .gantt-rollup::before,
+  .gantt-rollup::after{
+    content: "";
+    position: absolute;
+    bottom: -5px;
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid currentColor;
+    opacity: 0.7;
+  }
+  .gantt-rollup::before{ left: -1px }
+  .gantt-rollup::after{ right: -1px }
 
   .arrows-svg{
     position: absolute; inset: 0;
@@ -726,10 +896,43 @@
       <button class="pill-btn" id="navToday" style="margin-left:6px">Heute</button>
     </div>
 
+    <!-- Повзунок масштабу для Gantt-вигляду (ширина однієї доби) -->
+    <div class="gantt-zoom" id="ganttZoomWrap" title="Масштаб Gantt">
+      <span class="zoom-ic" aria-hidden="true">—</span>
+      <input type="range" id="ganttZoom" min="18" max="96" step="2" value="56">
+      <span class="zoom-ic" aria-hidden="true">+</span>
+    </div>
+
     <div class="status" id="storeStatus" title="Speicher-Status">
       <span class="dot"></span><span class="txt">lokal</span>
     </div>
+
+    <!-- Блок інформації про користувача (аватар + ім'я + вихід) -->
+    <div class="user-info" id="userInfo" style="display:none">
+      <img class="avatar" id="userAvatar" alt="">
+      <span class="uname" id="userName"></span>
+      <button id="signOutBtn" title="Вийти з акаунта">Вийти</button>
+    </div>
   </header>
+
+  <!-- ===== Екран входу через Google ===== -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-card">
+      <h1>Planner</h1>
+      <p>Увійдіть через Google, щоб отримати доступ до ваших проектів.<br>Дані синхронізуються між усіма вашими пристроями.</p>
+      <button class="google-btn" id="googleSignInBtn">
+        <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C41.1 35.1 44 30 44 24c0-1.3-.1-2.6-.4-3.9z"/>
+        </svg>
+        Увійти через Google
+      </button>
+      <div class="login-error" id="loginError"></div>
+      <div class="login-hint" id="loginHint">Локальний режим — Firebase не налаштований.</div>
+    </div>
+  </div>
 
   <div class="views">
 
@@ -830,69 +1033,156 @@
  *
  *  Dann in firebaseConfig die Keys einsetzen.
  */
+/*
+ * ► НАЛАШТУВАННЯ FIREBASE ◄
+ *
+ * 1. https://console.firebase.google.com → створити проект
+ * 2. Build → Firestore Database → "Create database" → Test mode
+ * 3. Build → Authentication → Sign-in method → Google → Enable
+ * 4. Project settings (шестерня) → "Your apps" → </> Web-App → зареєструвати
+ * 5. Скопіюйте firebaseConfig-ключі сюди нижче
+ * 6. Authentication → Settings → Authorized domains — додати домен GitHub Pages
+ *
+ * Firestore-правила для захисту даних (кожен користувач бачить лише свої):
+ *   rules_version = '2';
+ *   service cloud.firestore {
+ *     match /databases/{db}/documents {
+ *       match /users/{uid}/{document=**} {
+ *         allow read, write: if request.auth != null && request.auth.uid == uid;
+ *       }
+ *     }
+ *   }
+ */
 const firebaseConfig = {
-  // apiKey:            "...",
-  // authDomain:        "...",
-  // projectId:         "...",
-  // storageBucket:     "...",
-  // messagingSenderId: "...",
-  // appId:             "..."
+  apiKey:            "AIzaSyDm1CDW1DDi947wVe3791VgsLCE2wcYgNc",
+  authDomain:        "projektplaner-7bfac.firebaseapp.com",
+  projectId:         "projektplaner-7bfac",
+  storageBucket:     "projektplaner-7bfac.firebasestorage.app",
+  messagingSenderId: "588969630827",
+  appId:             "1:588969630827:web:93e491191352d59b2be52e"
 };
 
+// Прапорець — чи налаштований Firebase (наявний apiKey)
 let useFirebase = !!firebaseConfig.apiKey;
-let fdb = null, fdoc = null;
+let fdb = null, fdoc = null;         // Firestore
+let fauth = null, fauthMod = null;   // Auth
+let currentUser = null;              // Поточний авторизований користувач
 
 if (useFirebase){
   try{
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
     const firestore = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const authMod = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
     const app = initializeApp(firebaseConfig);
     fdb = firestore.getFirestore(app);
     fdoc = firestore;
+    fauth = authMod.getAuth(app);
+    fauthMod = authMod;
   } catch(e){
     console.warn("Firebase failed, falling back to localStorage:", e);
     useFirebase = false;
   }
 }
 
-const DOC_ID = "main"; // single-document app
-const COLLECTION = "planner";
+const DOC_ID = "main";        // Одна головна структура даних
+const COLLECTION = "planner"; // Назва колекції
+
+// Шлях до документа користувача у Firestore: users/{uid}/planner/main
+// Якщо користувач не увійшов — повертає null, щоб Store не читав/не писав
+function userDocRef(){
+  if (!useFirebase || !currentUser) return null;
+  return fdoc.doc(fdb, "users", currentUser.uid, COLLECTION, DOC_ID);
+}
 
 const Store = {
   async load(){
-    if (useFirebase){
+    const ref = userDocRef();
+    if (ref){
       try{
-        const ref = fdoc.doc(fdb, COLLECTION, DOC_ID);
         const snap = await fdoc.getDoc(ref);
         if (snap.exists()){
           return snap.data();
         }
       }catch(e){ console.warn("FB load failed", e); }
     }
+    // Локальний fallback (коли Firebase вимкнений або поки без авторизації)
     const raw = localStorage.getItem("plannerState");
     if (raw) { try{ return JSON.parse(raw); }catch{} }
     return null;
   },
   async save(state){
     const payload = JSON.parse(JSON.stringify(state));
-    // keep non-persistent UI state out
+    // UI-стан не зберігаємо
     delete payload.ui;
-    if (useFirebase){
+    const ref = userDocRef();
+    if (ref){
       try{
-        const ref = fdoc.doc(fdb, COLLECTION, DOC_ID);
         await fdoc.setDoc(ref, payload);
       }catch(e){ console.warn("FB save failed", e); }
     }
     localStorage.setItem("plannerState", JSON.stringify(payload));
   },
   subscribe(cb){
-    if (!useFirebase) return ()=>{};
+    const ref = userDocRef();
+    if (!ref) return ()=>{};
     try{
-      const ref = fdoc.doc(fdb, COLLECTION, DOC_ID);
       return fdoc.onSnapshot(ref, s => { if (s.exists()) cb(s.data()); });
     }catch(e){ return ()=>{}; }
   }
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   1b. AUTH — Google Sign-In
+   ═══════════════════════════════════════════════════════════════ */
+
+// Показати / сховати екран входу
+function showLogin(show){
+  const ov = document.getElementById("loginOverlay");
+  ov.classList.toggle("show", show);
+}
+
+// Оновити інформацію про користувача у верхній панелі
+function renderUserInfo(){
+  const box = document.getElementById("userInfo");
+  if (!currentUser){ box.style.display = "none"; return; }
+  box.style.display = "";
+  document.getElementById("userAvatar").src = currentUser.photoURL || "";
+  document.getElementById("userName").textContent = currentUser.displayName || currentUser.email || "";
+}
+
+// Помилка на екрані входу
+function showLoginError(msg){
+  const el = document.getElementById("loginError");
+  if (!msg){ el.classList.remove("show"); el.textContent = ""; return; }
+  el.textContent = msg;
+  el.classList.add("show");
+}
+
+// Вхід через Google (popup)
+async function signInGoogle(){
+  if (!useFirebase){
+    showLoginError("Firebase не налаштований у коді. Додайте firebaseConfig.");
+    return;
+  }
+  try{
+    showLoginError("");
+    const provider = new fauthMod.GoogleAuthProvider();
+    await fauthMod.signInWithPopup(fauth, provider);
+    // Далі спрацьовує onAuthStateChanged → booting()
+  }catch(e){
+    console.error("Sign-in failed", e);
+    showLoginError("Не вдалось увійти: " + (e.message || e.code || "невідома помилка"));
+  }
+}
+
+// Вихід з акаунта
+async function signOutUser(){
+  if (!useFirebase) return;
+  try{
+    await fauthMod.signOut(fauth);
+    // Після виходу onAuthStateChanged знову покаже екран входу
+  }catch(e){ console.error("Sign-out failed", e); }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    2. STATE
@@ -1023,12 +1313,44 @@ function hhmmFromMinutes(m){ m = Math.max(0, Math.min(24*60, m)); return pad(Mat
 
 function findProject(id){ return state.projects.find(p=>p.id===id); }
 function findSubproject(pid, spid){ const p = findProject(pid); return p?.subprojects.find(s=>s.id===spid); }
-function findSubtask(pid, spid, stid){ const sp = findSubproject(pid,spid); return sp?.subtasks.find(t=>t.id===stid); }
+// Рекурсивний пошук підзадачі в дереві (підтримує вкладеність будь-якої глибини)
+function findSubtaskDeep(nodes, id){
+  if (!nodes) return null;
+  for (const n of nodes){
+    if (n.id === id) return n;
+    if (n.subtasks){
+      const f = findSubtaskDeep(n.subtasks, id);
+      if (f) return f;
+    }
+  }
+  return null;
+}
+function findSubtask(pid, spid, stid){
+  const sp = findSubproject(pid, spid);
+  return findSubtaskDeep(sp?.subtasks, stid);
+}
+// Збирає всі ID з піддерева підзадач (для каскадного видалення)
+function collectSubtaskIds(nodes, out=[]){
+  if (!nodes) return out;
+  for (const n of nodes){ out.push(n.id); if (n.subtasks) collectSubtaskIds(n.subtasks, out); }
+  return out;
+}
+// Видаляє підзадачу (за ID) десь у дереві; повертає true якщо знайшлось
+function removeSubtaskDeep(nodes, id){
+  if (!nodes) return false;
+  const idx = nodes.findIndex(n=>n.id===id);
+  if (idx >= 0){ nodes.splice(idx,1); return true; }
+  for (const n of nodes){
+    if (n.subtasks && removeSubtaskDeep(n.subtasks, id)) return true;
+  }
+  return false;
+}
 function projectOf(task){ return findProject(task.projectId); }
 function projectPath(task){
   const p = findProject(task.projectId); if (!p) return "";
   const sp = p.subprojects.find(s=>s.id===task.subprojectId);
-  const st = sp?.subtasks.find(t=>t.id===task.subtaskId);
+  // Шукаємо підзадачу рекурсивно (може бути вкладеною)
+  const st = findSubtaskDeep(sp?.subtasks, task.subtaskId);
   return [p?.name, sp?.name, st?.name].filter(Boolean).join(" / ");
 }
 
@@ -1046,6 +1368,9 @@ function setView(v){
   state.ui = state.ui || {}; state.ui.view = v;
   document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active", el.id === v+"-view"));
   document.querySelectorAll("#viewSwitcher button").forEach(b=>b.classList.toggle("active", b.dataset.view===v));
+  // Повзунок масштабу актуальний лише для Gantt
+  const zoomWrap = document.getElementById("ganttZoomWrap");
+  if (zoomWrap) zoomWrap.style.display = (v==="gantt") ? "" : "none";
   renderDateNav();
   if (v==="gantt") renderGantt();
   if (v==="week") renderWeek();
@@ -1177,20 +1502,34 @@ function renderProjectTree(){
         host.appendChild(spnode);
 
         if (spExpanded){
-          sp.subtasks.forEach(st=>{
-            const stnode = document.createElement("div");
-            stnode.className = "p-node depth-2";
-            stnode.innerHTML = `
-              <span class="chev"></span>
-              <span class="swatch" style="background:${p.color}"></span>
-              <span class="name">${escapeHtml(st.name)}</span>
-              <span class="act" data-act="edit-st">✎</span>
-            `;
-            stnode.onclick = (e)=>{
-              if (e.target.closest(".act")){ editSubtask(p, sp, st); return; }
-            };
-            host.appendChild(stnode);
-          });
+          // Рекурсивний рендер підзадач (будь-якої глибини)
+          const renderSub = (nodes, depth)=>{
+            nodes.forEach(st=>{
+              const stExpanded = (state.ui?.expanded||{})[st.id] !== false;
+              const hasCh = (st.subtasks||[]).length > 0;
+              const stnode = document.createElement("div");
+              stnode.className = "p-node depth-"+Math.min(depth, 4);
+              stnode.style.paddingLeft = (depth*16)+"px";
+              stnode.innerHTML = `
+                <span class="chev">${hasCh ? (stExpanded?"▾":"▸") : ""}</span>
+                <span class="swatch" style="background:${p.color}"></span>
+                <span class="name">${escapeHtml(st.name)}</span>
+                <span class="act" data-act="edit-st" title="Bearbeiten">✎</span>
+                <span class="act" data-act="add-nested" title="Unteraufgabe">+</span>
+              `;
+              stnode.onclick = (e)=>{
+                const act = e.target.closest(".act")?.dataset.act;
+                if (act === "edit-st"){ editSubtask(p, sp, st); return; }
+                if (act === "add-nested"){ addNestedSubtask(p, st); return; }
+                if (hasCh && e.target.closest(".chev")){ toggleExpand(st.id); return; }
+              };
+              host.appendChild(stnode);
+              if (hasCh && stExpanded){
+                renderSub(st.subtasks, depth+1);
+              }
+            });
+          };
+          renderSub(sp.subtasks || [], 2);
         }
       });
 
@@ -1268,25 +1607,39 @@ function editSubproject(p, sp){
     }
   });
 }
-function addSubtask(p, sp){
+// Створення підзадачі у будь-якого батька (sp — підпроект, або інша підзадача)
+function addSubtask(p, parent){
   openModal({
     title:"Neue Unteraufgabe",
     fields:[{ key:"name", label:"Name", value:""}],
     onSubmit:(v)=>{
       if (!v.name.trim()) return;
-      sp.subtasks.push({ id: uid(), name: v.name.trim()});
+      parent.subtasks = parent.subtasks || [];
+      parent.subtasks.push({ id: uid(), name: v.name.trim(), subtasks: [] });
       closeModal(); render(); persist();
     }
   });
+}
+// Створення вкладеної підзадачі у існуючій підзадачі
+function addNestedSubtask(p, st){
+  addSubtask(p, st);
 }
 function editSubtask(p, sp, st){
   openModal({
     title:"Unteraufgabe bearbeiten",
     fields:[{ key:"name", label:"Name", value: st.name}],
+    extraAction: {
+      label: "+ Unteraufgabe hinzufügen",
+      fn: ()=>{ closeModal(); addNestedSubtask(p, st); }
+    },
     onDelete:()=>{
-      sp.subtasks = sp.subtasks.filter(x=>x.id!==st.id);
-      state.ganttTasks = state.ganttTasks.filter(t=>t.subtaskId!==st.id);
-      state.tasks = state.tasks.filter(t=>t.subtaskId!==st.id);
+      // Каскадне видалення: всі ID з піддерева підзадачі
+      const idsToRemove = collectSubtaskIds([st]);
+      // Видалити саму підзадачу з дерева (де б вона не була)
+      removeSubtaskDeep(sp.subtasks, st.id);
+      // Видалити усі задачі, прив'язані до цього піддерева
+      state.ganttTasks = state.ganttTasks.filter(t=>!idsToRemove.includes(t.subtaskId));
+      state.tasks      = state.tasks.filter(t=>!idsToRemove.includes(t.subtaskId));
       closeModal(); render(); persist();
     },
     onSubmit:(v)=>{
@@ -1303,10 +1656,21 @@ function editSubtask(p, sp, st){
 
 const GANTT_DAYS = 60;     // total days rendered
 
+// Поточна ширина одного дня у Gantt (px). Регулюється повзунком масштабу.
+function getDayW(){
+  const v = Number(state.ganttDayW);
+  if (Number.isFinite(v) && v >= 12 && v <= 160) return v;
+  return 56; // значення за замовчуванням
+}
+
 function renderGantt(){
   const start = parseISO(state.ganttStart);
-  const dayW = 56;
+  const dayW = getDayW(); // динамічна ширина дня (повзунок)
   const totalW = GANTT_DAYS * dayW;
+
+  // Синхронізуємо позицію повзунка зі збереженим значенням
+  const zoomEl = document.getElementById("ganttZoom");
+  if (zoomEl && Number(zoomEl.value) !== dayW) zoomEl.value = dayW;
   document.documentElement.style.setProperty("--day-w", dayW+"px");
 
   // sync widths of the month/day/grid rows
@@ -1383,14 +1747,42 @@ function renderGantt(){
     r.className = "gantt-row";
     if (row.level===0){ r.classList.add("group-hdr"); }
     if (row.level===1){ r.classList.add("group-hdr","level-1"); }
-    if (row.level===2){ r.classList.add("level-2"); }
+    if (row.level>=2){ r.classList.add("level-"+row.level); }
+    // Проміжні рівні (level-2 з дітьми) теж можна стилізувати як групу
+    if (row.hasChildren && row.level>=2){ r.classList.add("group-hdr"); }
     r.style.top = (i*rowH)+"px";
     r.style.position = "absolute";
     r.style.left = 0; r.style.right = 0;
-    r.innerHTML = `<div class="row-label">${row.level===0?`<span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;background:${row.color}"></span>`:""}${escapeHtml(row.label)}</div>`;
+    // Стрілка згортання — лише для рядків з дітьми; для листків — порожня місцезаповнювач
+    const chev = row.hasChildren
+      ? `<span class="chev ${row.collapsed?'off':''}" data-key="${row.key}" title="Згорнути/розгорнути">▾</span>`
+      : `<span class="chev-spacer"></span>`;
+    const swatch = row.level===0
+      ? `<span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;background:${row.color}"></span>`
+      : "";
+    r.innerHTML = `<div class="row-label">${chev}${swatch}${escapeHtml(row.label)}</div>`;
     rowsHost.appendChild(r);
 
-    // draw bars
+    // Rollup-бар: напівпрозорий, показує діапазон [min..max] усіх дочірніх задач.
+    // Батьківська група автоматично "охоплює" своїх дітей по ширині.
+    if (row.rollup){
+      const rs = parseISO(row.rollup.start);
+      const re = parseISO(row.rollup.end);
+      const rLeft = 220 + diffDays(state.ganttStart, iso(rs))*dayW + 2;
+      const rDays = Math.max(1, diffDays(iso(rs), iso(re))+1);
+      const rWidth = rDays*dayW - 4;
+      const rollup = document.createElement("div");
+      rollup.className = "gantt-rollup";
+      rollup.style.left = rLeft+"px";
+      rollup.style.top  = (i*rowH + 6)+"px";
+      rollup.style.width = rWidth+"px";
+      rollup.style.background = row.color;
+      rollup.style.color = row.color;
+      rowsHost.appendChild(rollup);
+    }
+
+    // Малюємо бари на рядку. Не показуємо title бара, якщо він дублює
+    // лейбл ряду (наприклад, назву підзадачі) — щоб не було дубля.
     row.tasks?.forEach(t=>{
       const barStart = parseISO(t.start);
       const barEnd   = parseISO(t.end);
@@ -1404,9 +1796,11 @@ function renderGantt(){
       bar.style.top  = (i*rowH + 6)+"px";
       bar.style.width = width+"px";
       bar.style.background = row.color;
+      const sameAsRow = (t.title || "").trim() === (row.label || "").trim();
+      const titleHtml = sameAsRow ? "" : `<span class="title">${escapeHtml(t.title)}</span>`;
       bar.innerHTML = `
         <span class="handle l"></span>
-        <span class="title">${escapeHtml(t.title)}</span>
+        ${titleHtml}
         <span class="handle r"></span>
         <span class="dep-dot l" data-side="l"></span>
         <span class="dep-dot r" data-side="r"></span>
@@ -1456,25 +1850,90 @@ function renderGantt(){
   }
 }
 
+// Обчислює [min(start), max(end)] по масиву задач, або null якщо пусто
+function spanOfTasks(arr){
+  if (!arr || !arr.length) return null;
+  let mn = arr[0].start, mx = arr[0].end;
+  for (const t of arr){
+    if (t.start < mn) mn = t.start;
+    if (t.end   > mx) mx = t.end;
+  }
+  return { start: mn, end: mx };
+}
+
 function buildGanttRows(){
   const rows = [];
+  // Словник згорнутих груп: ключ "p:<id>" або "sp:<id>"
+  const collapsed = state.ui?.collapsed || {};
   const projList = state.selectedProjectId
     ? state.projects.filter(p=>p.id===state.selectedProjectId)
     : state.projects;
 
   projList.forEach(p=>{
     const projectTasks = state.ganttTasks.filter(t=>t.projectId===p.id);
-    const projectRowTasks = projectTasks.filter(t=>!t.subprojectId);
-    rows.push({ level:0, label:p.name, color:p.color, tasks: projectRowTasks, projectId:p.id });
+    const projKey = "p:"+p.id;
+    const pCollapsed = !!collapsed[projKey];
+    // Коли проект згорнутий — показуємо усі його задачі на рядку проекту
+    const projectRowTasks = pCollapsed
+      ? projectTasks
+      : projectTasks.filter(t=>!t.subprojectId);
+    const pHasChildren = (p.subprojects || []).length > 0;
+    // Rollup: діапазон усіх задач проекту (всі рівні)
+    const pRollup = pHasChildren ? spanOfTasks(projectTasks) : null;
+    rows.push({
+      level:0, label:p.name, color:p.color, tasks: projectRowTasks,
+      projectId:p.id, key: projKey,
+      hasChildren: pHasChildren, collapsed: pCollapsed,
+      rollup: pCollapsed ? null : pRollup, // при згорнутому баки є свої, rollup зайвий
+    });
+    if (pCollapsed) return; // дочірні ряди не показуємо
 
     p.subprojects.forEach(sp=>{
-      const subprojectRowTasks = projectTasks.filter(t=>t.subprojectId===sp.id && !t.subtaskId);
-      rows.push({ level:1, label:sp.name, color:p.color, tasks: subprojectRowTasks, projectId:p.id, subprojectId:sp.id });
-
-      sp.subtasks.forEach(st=>{
-        const subtaskRowTasks = projectTasks.filter(t=>t.subtaskId===st.id);
-        rows.push({ level:2, label:st.name, color:p.color, tasks: subtaskRowTasks, projectId:p.id, subprojectId:sp.id, subtaskId:st.id });
+      const spKey = "sp:"+sp.id;
+      const spCollapsed = !!collapsed[spKey];
+      const spAllTasks = projectTasks.filter(t=>t.subprojectId===sp.id);
+      // Коли підпроект згорнутий — агрегуємо всі його задачі
+      const subprojectRowTasks = spCollapsed
+        ? spAllTasks
+        : spAllTasks.filter(t=>!t.subtaskId);
+      const spHasChildren = (sp.subtasks || []).length > 0;
+      const spRollup = spHasChildren ? spanOfTasks(spAllTasks) : null;
+      rows.push({
+        level:1, label:sp.name, color:p.color, tasks: subprojectRowTasks,
+        projectId:p.id, subprojectId:sp.id, key: spKey,
+        hasChildren: spHasChildren, collapsed: spCollapsed,
+        rollup: spCollapsed ? null : spRollup,
       });
+      if (spCollapsed) return;
+
+      // Рекурсивний обхід дерева підзадач (будь-яка глибина вкладеності)
+      const walkSubtasks = (nodes, level)=>{
+        nodes.forEach(st=>{
+          const stKey = "st:"+st.id;
+          const stCollapsed = !!collapsed[stKey];
+          const stHasChildren = (st.subtasks || []).length > 0;
+          // Збираємо ID всіх нащадків (включно зі самим), щоб rollup охоплював усі задачі піддерева
+          const stAllIds = collectSubtaskIds([st]);
+          const stAllTasks = projectTasks.filter(t=>stAllIds.includes(t.subtaskId));
+          // Бари, що малюються на рядку самої підзадачі
+          const stDirectTasks = projectTasks.filter(t=>t.subtaskId===st.id);
+          const stRowTasks = stCollapsed ? stAllTasks : stDirectTasks;
+          const stRollup = (!stCollapsed && stHasChildren) ? spanOfTasks(stAllTasks) : null;
+          rows.push({
+            level: Math.min(level, 6), // обмежуємо CSS-рівень, дерево глибше теж відображається
+            label: st.name, color: p.color, tasks: stRowTasks,
+            projectId: p.id, subprojectId: sp.id, subtaskId: st.id,
+            key: stKey,
+            hasChildren: stHasChildren, collapsed: stCollapsed,
+            rollup: stRollup,
+          });
+          if (stCollapsed) return;
+          if (stHasChildren){
+            walkSubtasks(st.subtasks, level+1);
+          }
+        });
+      };
+      walkSubtasks(sp.subtasks || [], 2);
     });
   });
   return rows;
@@ -1685,7 +2144,15 @@ function editGanttTask(task){
   const proj = findProject(task.projectId);
   const spOpts = proj?.subprojects.map(sp=>({id:sp.id, name:sp.name})) || [];
   const sp = findSubproject(task.projectId, task.subprojectId);
-  const stOpts = sp?.subtasks.map(st=>({id:st.id, name:st.name})) || [];
+  // Плоский список підзадач з відступом (emoji-пробіли показують глибину вкладеності)
+  const stOpts = [];
+  const flattenSt = (nodes, depth)=>{
+    (nodes||[]).forEach(st=>{
+      stOpts.push({ id: st.id, name: "— ".repeat(depth) + st.name });
+      if (st.subtasks?.length) flattenSt(st.subtasks, depth+1);
+    });
+  };
+  flattenSt(sp?.subtasks || [], 0);
 
   openModal({
     title:"Gantt-Aufgabe",
@@ -1718,6 +2185,18 @@ function editGanttTask(task){
   });
 }
 
+/* Обробник згортання/розгортання груп у Gantt (клік по стрілці) */
+document.getElementById("ganttRows").addEventListener("click",(e)=>{
+  const chev = e.target.closest(".chev");
+  if (!chev) return;
+  const key = chev.dataset.key;
+  if (!key) return;
+  state.ui = state.ui || {};
+  state.ui.collapsed = state.ui.collapsed || {};
+  state.ui.collapsed[key] = !state.ui.collapsed[key];
+  renderGantt();
+});
+
 /* Create new bar by clicking an empty area in a row */
 document.getElementById("ganttRows").addEventListener("dblclick",(e)=>{
   const row = e.target.closest(".gantt-row"); if (!row) return;
@@ -1727,7 +2206,7 @@ document.getElementById("ganttRows").addEventListener("dblclick",(e)=>{
   const r = inner.getBoundingClientRect();
   const x = e.clientX - r.left - 220;
   if (x < 0) return;
-  const dayW = 56;
+  const dayW = getDayW();
   const dayIndex = Math.floor(x / dayW);
   const rowIdx = Math.floor(parseFloat(row.style.top) / 36);
   const meta = rows[rowIdx]; if (!meta) return;
@@ -2399,35 +2878,87 @@ function toast(msg){
    11. BOOT
    ═══════════════════════════════════════════════════════════════ */
 
-(async function boot(){
+// Зберігаємо unsubscribe від Firestore, щоб відписуватись при зміні користувача
+let unsubscribeStore = null;
+
+// Завантаження даних та повний рендер (викликається після входу або одразу в локальному режимі)
+async function bootLoadData(){
   const loaded = await Store.load();
   if (loaded){
-    // merge: keep loaded fields, ensure defaults present
+    // Мерж: зберігаємо поля з БД, додаємо відсутні дефолти
     state = { ...defaultState(), ...loaded };
-    // guarantee arrays exist
+    // Гарантуємо, що масиви існують
     state.projects ||= [];
     state.ganttTasks ||= [];
     state.blocks ||= [];
     state.tasks ||= [];
+  } else {
+    // Немає даних у користувача — починаємо з дефолтних
+    state = defaultState();
   }
   render();
-  Store.subscribe((data)=>{
+  // Відписуємось від попередньої підписки (якщо була)
+  if (unsubscribeStore){ try{ unsubscribeStore(); }catch{} unsubscribeStore = null; }
+  unsubscribeStore = Store.subscribe((data)=>{
     state = { ...state, ...data };
     render();
   });
-  // periodic now-line refresh
+}
+
+// Обробка регулярного оновлення "червоної лінії" поточного часу у Gantt
+function startNowLineTick(){
   setInterval(()=>{
     if ((state.ui?.view||"gantt")==="gantt"){
-      const dayW = 56;
+      const dayW = getDayW();
       const nowMs = Date.now();
       const startMs = parseISO(state.ganttStart).getTime();
       const fracDays = (nowMs - startMs) / 86400000;
       const nowLine = document.getElementById("ganttNow");
+      if (!nowLine) return;
       if (fracDays>=0 && fracDays<=GANTT_DAYS){
         nowLine.style.display=""; nowLine.style.left=(220+fracDays*dayW)+"px";
       } else nowLine.style.display="none";
     }
   }, 60000);
+}
+
+(async function boot(){
+  // Підключаємо обробники кнопок входу/виходу
+  document.getElementById("googleSignInBtn").addEventListener("click", signInGoogle);
+  document.getElementById("signOutBtn").addEventListener("click", signOutUser);
+
+  // Повзунок масштабу Gantt: змінює ширину дня і перемальовує діаграму
+  const zoomEl = document.getElementById("ganttZoom");
+  zoomEl.addEventListener("input", (e)=>{
+    state.ganttDayW = Number(e.target.value) || 56;
+    renderGantt();
+    persist();
+  });
+
+  startNowLineTick();
+
+  if (useFirebase){
+    // Чекаємо на стан авторизації Firebase
+    document.getElementById("loginHint").textContent = "Ваші дані синхронізуються через Firebase.";
+    fauthMod.onAuthStateChanged(fauth, async (user) => {
+      currentUser = user;
+      if (user){
+        // Користувач увійшов — ховаємо login, показуємо додаток
+        showLogin(false);
+        renderUserInfo();
+        await bootLoadData();
+      } else {
+        // Не увійшов — показуємо екран входу, чистимо додаток
+        renderUserInfo();
+        showLogin(true);
+      }
+    });
+  } else {
+    // Локальний режим без Firebase — одразу завантажуємо дані
+    showLogin(false);
+    renderUserInfo();
+    await bootLoadData();
+  }
 })();
 
 </script>

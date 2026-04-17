@@ -2804,10 +2804,10 @@ function computeBlockFill(block, date){
 }
 
 /* Перевірка: чи влізе task у ланцюжок блоків з цим title після призначення до newBlockId.
-   Повертає true якщо сумарна duration всіх tasks ≤ сумарний cap. */
+   Враховуємо ТІЛЬКИ блоки, що ще не пройшли (блоки в минулому пропускаємо). */
 function chainFitsAfterAdding(title, task, newBlockId){
-  const chain = getBlocksForWeek(title);
-  if (!chain.some(b=>b.id === newBlockId)) return false; // цей блок не з ланцюжка
+  const chain = getBlocksForWeek(title).filter(b=>!isBlockInPast(b));
+  if (!chain.some(b=>b.id === newBlockId)) return false; // цей блок не з ланцюжка або у минулому
   const totalCap = chain.reduce((s,b)=>s + (minutesFromHHMM(b.end)-minutesFromHHMM(b.start)), 0);
   // Інші задачі у ланцюжку (не ця сама task)
   const others = state.tasks.filter(t =>
@@ -3061,10 +3061,11 @@ function isBlockInPast(block){
 }
 
 // Перший блок ланцюжка (з тою ж назвою), у якому ще є вільне місце для task.
-// Повертає null, якщо всі блоки ланцюжка заповнені.
+// Пропускаємо блоки, що вже в минулому — task не може попасти у block, який вже пройшов.
 function firstFreeBlockInChain(title, task){
   const chain = getBlocksForWeek(title);
   for (const b of chain){
+    if (isBlockInPast(b)) continue;
     const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
     const others = state.tasks.filter(t =>
       !t.done && t.id !== task.id && t.weekId === state.weekStart && t.blockId === b.id

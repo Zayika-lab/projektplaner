@@ -2771,16 +2771,17 @@ function renderWeekBlock(col, block, date){
   // Заповнення блоку (підраховує задачі + overflow ланцюжок)
   const fill = computeBlockFill(block, date);
   el.style.color = fill.projectColor || "var(--ink-3)";
-  // Колір блоку: рамка переймає обраний колір (чітко, без прозорості);
-  // фон — легкий відтінок цього ж кольору
-  if (block.color){
-    el.style.background = hexWithAlpha(block.color, 0.10);
-    el.style.borderColor = block.color;
+  // Колір блоку: всі блоки з тою ж назвою мають однаковий колір.
+  // Якщо цей блок не має власного color — використовуємо колір ланцюжка за title.
+  const chainColor = block.color || colorForBlockTitle(block.title);
+  if (chainColor){
+    el.style.background = hexWithAlpha(chainColor, 0.10);
+    el.style.borderColor = chainColor;
     el.style.borderWidth = "2px";
   }
 
   el.innerHTML = `
-    ${block.color ? `<div class="wb-color-bar" style="background:${block.color}"></div>` : ""}
+    ${chainColor ? `<div class="wb-color-bar" style="background:${chainColor}"></div>` : ""}
     <div class="wb-fill" style="height:${fill.pct*100}%"></div>
     <div class="wb-resize top" data-edge="top"></div>
     <div class="wb-resize bot" data-edge="bot"></div>
@@ -3540,9 +3541,20 @@ function editBlock(block){
       if (minutesFromHHMM(block.end) <= minutesFromHHMM(block.start)){
         block.end = hhmmFromMinutes(minutesFromHHMM(block.start)+30);
       }
+      // Синхронізуємо колір: всі блоки з тою ж назвою отримують цей же колір
+      state.blocks.forEach(b => {
+        if (b.title === block.title) b.color = block.color;
+      });
       closeModal(); renderWeek(); persist();
     }
   });
+}
+
+// Повертає колір, закріплений за назвою блоку (з першого блоку, де він встановлений).
+// Використовується для нових блоків, щоб вони успадковували колір існуючого ланцюжка.
+function colorForBlockTitle(title){
+  const existing = state.blocks.find(b => b.title === title && b.color);
+  return existing?.color || null;
 }
 
 /* Double-click empty week-day area to create block */

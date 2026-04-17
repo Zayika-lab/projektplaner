@@ -976,9 +976,15 @@
     border-radius: 7px;
   }
   .modal-actions{
-    display:flex; justify-content: space-between; gap:8px; margin-top: 18px;
+    display:flex; justify-content: space-between; gap:12px; margin-top: 18px;
+    align-items: flex-start;
   }
-  .modal-actions .left{ display:flex; gap:6px }
+  /* Ліва колонка (додаткові дії + Löschen) — кнопки одна під одною */
+  .modal-actions .left{
+    display:flex; flex-direction: column; gap:6px;
+    align-items: flex-start;
+  }
+  .modal-actions .left .btn{ width: 100%; text-align: left; white-space: normal; }
   .modal-actions .right{ display:flex; gap:6px; margin-left:auto }
   .btn{
     padding: 7px 14px;
@@ -2965,11 +2971,15 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
         const newBlockId = targetBlockEl.dataset.blockId;
         if (newBlockId && newBlockId !== task.blockId){
           const newBlock = state.blocks.find(b=>b.id === newBlockId);
+          // Блок повністю в минулому — забороняємо drop
+          if (newBlock && isBlockInPast(newBlock)){
+            flashBlockRed(targetBlockEl);
+            return;
+          }
           if (newBlock && !chainFitsAfterAdding(newBlock.title, task, newBlockId)){
             flashBlockRed(targetBlockEl);
             return;
           }
-          // Фактичний блок — перший у ланцюжку з вільним місцем
           const actual = firstFreeBlockInChain(newBlock.title, task) || newBlock;
           task.blockId = actual.id;
           task.weekId  = state.weekStart;
@@ -3030,6 +3040,21 @@ function ensureOverflowBlock(task, blockId){
     color: block.color || null,
     weekId: block.weekId,
   });
+}
+
+// Перевіряє чи блок повністю у минулому (його кінець раніше поточного часу).
+// Для днів тижня, які вже минули — true. Для майбутніх — false.
+// Для сьогодні — порівнюємо block.end з поточною хвилиною.
+function isBlockInPast(block){
+  const ws = parseISO(state.weekStart);
+  const blockDate = addDays(ws, block.dow);
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (blockDate.getTime() < today.getTime()) return true;
+  if (blockDate.getTime() > today.getTime()) return false;
+  // Сьогодні — порівнюємо кінець блоку з поточним часом
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  return minutesFromHHMM(block.end) <= nowMin;
 }
 
 // Перший блок ланцюжка (з тою ж назвою), у якому ще є вільне місце для task.
@@ -3335,15 +3360,18 @@ function attachTaskDrag(el, t){
       if (block){
         const b = state.blocks.find(x=>x.id===block.dataset.blockId);
         if (b){
+          // Блок повністю в минулому — забороняємо drop
+          if (isBlockInPast(b)){
+            flashBlockRed(block);
+            return;
+          }
           if (!chainFitsAfterAdding(b.title, t, b.id)){
             flashBlockRed(block);
             return;
           }
-          // Фактичний блок = перший блок ланцюжка з вільним місцем (щоб task не "втрачав" позицію)
           const actual = firstFreeBlockInChain(b.title, t) || b;
           t.blockId = actual.id;
           t.weekId = state.weekStart;
-          // Якщо фактичний блок містить поточний час — task починається під лінією
           maybeSetDropAtNow(t, actual.id);
           persist(); renderWeek(); renderTaskList();
           return;

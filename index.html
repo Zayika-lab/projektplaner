@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Planner</title>
+<!-- Favicon: мінімалістична іконка-календар (SVG inline, працює без зовнішніх файлів) -->
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='6' y='12' width='52' height='46' rx='6' fill='%23111'/><rect x='6' y='12' width='52' height='12' fill='%236f8f7b'/><rect x='14' y='6' width='6' height='14' rx='2' fill='%23111'/><rect x='44' y='6' width='6' height='14' rx='2' fill='%23111'/><rect x='14' y='32' width='10' height='6' rx='1.5' fill='%23fff'/><rect x='28' y='32' width='10' height='6' rx='1.5' fill='%237b93b3'/><rect x='42' y='32' width='8' height='6' rx='1.5' fill='%23b09451'/><rect x='14' y='42' width='14' height='6' rx='1.5' fill='%23b38672'/><rect x='32' y='42' width='8' height='6' rx='1.5' fill='%23fff'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23ffffff'/><rect x='6' y='12' width='52' height='46' rx='6' fill='%23111'/><rect x='6' y='12' width='52' height='12' fill='%236f8f7b'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -346,6 +349,31 @@
     overflow: hidden;
     background: var(--bg);
   }
+  /* Об'єднаний Gantt без окремого sidebar — додаємо рядок під toolbar */
+  .gantt-main.full{
+    grid-template-rows: 36px 30px 24px 1fr;
+  }
+  .gantt-toolbar{
+    display:flex; align-items:center; gap:10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+  .gantt-toolbar .pill-btn.ghost{
+    border-color: transparent;
+    background: transparent;
+    color: var(--ink-3);
+  }
+  .gantt-toolbar .pill-btn.ghost.active,
+  .gantt-toolbar .pill-btn.ghost:hover{
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  .gantt-toolbar .count{
+    font-size: 11px;
+    color: var(--ink-4);
+    margin-right: auto;
+  }
   .gantt-monthrow, .gantt-dayrow{
     border-bottom: 1px solid var(--line);
     position: relative;
@@ -406,14 +434,32 @@
     position: sticky; left: 0;
     width: 220px;
     height: 100%;
-    padding: 0 12px;
-    display:flex; align-items:center; gap:8px;
+    padding: 0 8px 0 12px;
+    display:flex; align-items:center; gap:6px;
     font-size: 12px;
     color: var(--ink-2);
     background: var(--bg);
     border-right: 1px solid var(--line);
     z-index: 3;
+    cursor: pointer;
   }
+  .gantt-row .row-label .lname{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .gantt-row .row-label .row-acts{
+    display: none;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+  }
+  .gantt-row:hover .row-label .row-acts{ display: flex }
+  .gantt-row .row-label .row-act{
+    width: 18px; height: 18px;
+    display:inline-flex; align-items:center; justify-content:center;
+    color: var(--ink-4);
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .gantt-row .row-label .row-act:hover{ color: var(--ink); background: var(--bg-sunk) }
+  .gantt-row.is-filtered .row-label{ background: var(--bg-sunk) }
   .gantt-row.group-hdr .row-label{ background: var(--bg-soft); color: var(--ink); font-weight: 500}
   .gantt-row.group-hdr.level-1 .row-label{ padding-left: 26px; font-weight:400 }
   .gantt-row.level-2 .row-label{ padding-left: 42px; color:var(--ink-3)}
@@ -601,6 +647,25 @@
     display:flex; flex-direction:column;
   }
   .wblock.template{ border-style: dashed; background: #fdfdfc}
+  /* Кольорова смужка зверху блоку — показує колір блоку (set через style.background) */
+  .wblock .wb-color-bar{
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 3px;
+    pointer-events: none;
+  }
+  .wblock.dragging-block{
+    opacity: 0.7;
+    cursor: grabbing;
+    z-index: 50;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  }
+  /* Drag handle для всього блоку — задається на wb-head; пересування мишею */
+  .wblock .wb-head{ cursor: grab }
+  .wblock.dragging-block .wb-head{ cursor: grabbing }
+  /* Завдання у блоці теж drag'able — для перетягування між блоками */
+  .wblock .wb-task{ cursor: grab }
+  .wblock .wb-task.dragging{ opacity: 0.5 }
   .wblock .wb-fill{
     position: absolute; left:0; right:0; top:0;
     background: currentColor;
@@ -938,20 +1003,15 @@
 
     <!-- ============ GANTT ============ -->
     <section id="gantt-view" class="view active">
-      <aside class="sidebar">
-        <div class="sb-head">
-          <h2>Projekte</h2>
+      <!-- Об'єднана колонка: вже немає окремого sidebar.
+           Всі дії над проектами — у самій Gantt-таблиці. -->
+      <div class="gantt-main full">
+        <!-- Toolbar над Gantt-таблицею: фільтр всіх проектів + додати проект -->
+        <div class="gantt-toolbar">
+          <button class="pill-btn ghost" id="ganttAllProjects" title="Alle Projekte zeigen">Alle Projekte</button>
           <span class="count" id="projCount">0</span>
-        </div>
-        <div class="sb-body">
-          <div class="ptree" id="projectTree"></div>
-        </div>
-        <div class="sb-foot">
           <button class="pill-btn" id="addProjectBtn">+ Neues Projekt</button>
         </div>
-      </aside>
-
-      <div class="gantt-main">
         <div class="gantt-monthrow" id="ganttMonths"></div>
         <div class="gantt-dayrow" id="ganttDays"></div>
         <div class="gantt-scroll" id="ganttScroll">
@@ -963,6 +1023,8 @@
             <div class="now-line" id="ganttNow"></div>
           </div>
         </div>
+        <!-- Прихований контейнер: renderProjectTree() рендерить сюди (заглушка для сумісності) -->
+        <div id="projectTree" style="display:none"></div>
       </div>
     </section>
 
@@ -1664,6 +1726,7 @@ function getDayW(){
 }
 
 function renderGantt(){
+  updateGanttToolbar();
   const start = parseISO(state.ganttStart);
   const dayW = getDayW(); // динамічна ширина дня (повзунок)
   const totalW = GANTT_DAYS * dayW;
@@ -1760,7 +1823,17 @@ function renderGantt(){
     const swatch = row.level===0
       ? `<span class="swatch" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;background:${row.color}"></span>`
       : "";
-    r.innerHTML = `<div class="row-label">${chev}${swatch}${escapeHtml(row.label)}</div>`;
+    // Дії редагування / додавання дочірнього вузла відповідно до рівня
+    const acts = [
+      `<span class="row-act" data-act="edit" title="Bearbeiten">✎</span>`,
+      // На рівні 2+ можна додавати ще глибшу підзадачу; на 0/1 — додати дочірній вузол
+      `<span class="row-act" data-act="add" title="Hinzufügen">+</span>`,
+    ].join("");
+    if (state.selectedProjectId === row.projectId && row.level === 0) r.classList.add("is-filtered");
+    r.innerHTML = `<div class="row-label" data-row-idx="${i}">
+      ${chev}${swatch}<span class="lname">${escapeHtml(row.label)}</span>
+      <span class="row-acts">${acts}</span>
+    </div>`;
     rowsHost.appendChild(r);
 
     // Rollup-бар: напівпрозорий, показує діапазон [min..max] усіх дочірніх задач.
@@ -2185,17 +2258,65 @@ function editGanttTask(task){
   });
 }
 
-/* Обробник згортання/розгортання груп у Gantt (клік по стрілці) */
+/* Обробник кліків у row-label: chev (згортання), edit/add (дії), фільтрація проекту */
 document.getElementById("ganttRows").addEventListener("click",(e)=>{
+  // 1. Стрілка згортання
   const chev = e.target.closest(".chev");
-  if (!chev) return;
-  const key = chev.dataset.key;
-  if (!key) return;
-  state.ui = state.ui || {};
-  state.ui.collapsed = state.ui.collapsed || {};
-  state.ui.collapsed[key] = !state.ui.collapsed[key];
-  renderGantt();
+  if (chev && chev.dataset.key){
+    state.ui = state.ui || {};
+    state.ui.collapsed = state.ui.collapsed || {};
+    state.ui.collapsed[chev.dataset.key] = !state.ui.collapsed[chev.dataset.key];
+    renderGantt();
+    return;
+  }
+  // 2. Дії над вузлом (✎ / +)
+  const act = e.target.closest(".row-act")?.dataset.act;
+  const labelEl = e.target.closest(".row-label");
+  if (act && labelEl){
+    const idx = Number(labelEl.dataset.rowIdx);
+    const rows = buildGanttRows();
+    const row = rows[idx]; if (!row) return;
+    const p  = findProject(row.projectId);
+    const sp = row.subprojectId ? findSubproject(row.projectId, row.subprojectId) : null;
+    const st = row.subtaskId ? findSubtaskDeep(sp?.subtasks, row.subtaskId) : null;
+    if (act === "edit"){
+      if (st) editSubtask(p, sp, st);
+      else if (sp) editSubproject(p, sp);
+      else if (p) editProject(p);
+    } else if (act === "add"){
+      if (st) addNestedSubtask(p, st);
+      else if (sp) addSubtask(p, sp);
+      else if (p) addSubproject(p);
+    }
+    return;
+  }
+  // 3. Клік на лейбл проекту (level 0) — фільтр на цей проект (повторний клік скасовує)
+  if (labelEl){
+    const idx = Number(labelEl.dataset.rowIdx);
+    const rows = buildGanttRows();
+    const row = rows[idx]; if (!row) return;
+    if (row.level === 0){
+      state.selectedProjectId = (state.selectedProjectId === row.projectId) ? null : row.projectId;
+      renderGantt();
+      persist();
+    }
+  }
 });
+
+// Кнопки toolbar Gantt
+document.getElementById("ganttAllProjects").addEventListener("click", ()=>{
+  state.selectedProjectId = null;
+  renderGantt();
+  persist();
+});
+
+// Підсвітка кнопки "Alle Projekte" + лічильник проектів — оновлюємо в кожному renderGantt
+function updateGanttToolbar(){
+  const btn = document.getElementById("ganttAllProjects");
+  if (btn) btn.classList.toggle("active", state.selectedProjectId == null);
+  const cnt = document.getElementById("projCount");
+  if (cnt) cnt.textContent = state.projects.length;
+}
 
 /* Create new bar by clicking an empty area in a row */
 document.getElementById("ganttRows").addEventListener("dblclick",(e)=>{
@@ -2332,11 +2453,17 @@ function renderWeekBlock(col, block, date){
   el.style.height = height+"px";
   el.dataset.blockId = block.id;
 
-  // figure out which tasks fill this block (including overflow from earlier blocks)
+  // Заповнення блоку (підраховує задачі + overflow ланцюжок)
   const fill = computeBlockFill(block, date);
   el.style.color = fill.projectColor || "var(--ink-3)";
+  // Колір блоку (якщо встановлений) — фон + смужка зверху
+  if (block.color){
+    el.style.background = hexWithAlpha(block.color, 0.10);
+    el.style.borderColor = hexWithAlpha(block.color, 0.45);
+  }
 
   el.innerHTML = `
+    ${block.color ? `<div class="wb-color-bar" style="background:${block.color}"></div>` : ""}
     <div class="wb-fill" style="height:${fill.pct*100}%"></div>
     <div class="wb-head">
       <div class="wb-title">${escapeHtml(block.title)}</div>
@@ -2354,8 +2481,9 @@ function renderWeekBlock(col, block, date){
   `;
   col.appendChild(el);
 
-  // click to edit block
+  // Клік: редагувати блок або задачу всередині
   el.addEventListener("click",(e)=>{
+    if (el._suppressClick){ el._suppressClick = false; return; }
     if (e.target.closest(".wb-task")){
       const tid = e.target.closest(".wb-task").dataset.taskId;
       const t = state.tasks.find(x=>x.id===tid);
@@ -2365,9 +2493,27 @@ function renderWeekBlock(col, block, date){
     editBlock(block);
   });
 
-  // drop target registration via data attr
+  // Drop-індикація для перетягування завдань з sidebar
   el.addEventListener("pointerenter",()=>{ if (document.body.classList.contains("dragging-task")) el.classList.add("drop-target")});
   el.addEventListener("pointerleave",()=>el.classList.remove("drop-target"));
+
+  // Drag самого блоку (за заголовок) — переміщення по тижневій сітці
+  attachBlockDrag(el, block);
+  // Drag завдань всередині блоку — щоб переносити в інший блок
+  el.querySelectorAll(".wb-task").forEach(tEl=>{
+    const tid = tEl.dataset.taskId;
+    const t = state.tasks.find(x=>x.id===tid);
+    if (t) attachInBlockTaskDrag(tEl, t, el);
+  });
+}
+
+// Утиліта: hex колір + альфа (для напівпрозорого фону блоку)
+function hexWithAlpha(hex, alpha){
+  if (!hex || hex[0] !== "#") return hex;
+  const h = hex.replace("#","");
+  const v = h.length===3 ? h.split("").map(c=>c+c).join("") : h;
+  const r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 /* Fill calculation: a block gets tasks that are assigned to it OR overflow from earlier blocks on the same day */
@@ -2384,46 +2530,40 @@ function computeBlockFill(block, date){
   // Collect tasks that should be placed in this week (weekId = state.weekStart) and are assigned to any block of this day.
   const relevantTasks = state.tasks.filter(t => t.weekId === state.weekStart && t.blockId && blocksForDay.some(b=>b.id===t.blockId) && !t.done);
 
-  // Sort tasks by their original block order, then by their own ordering
-  const taskOrder = [];
+  // Збираємо черги завдань, окремо для кожного title-блоку
+  // Ключ: title оригінального блоку. Overflow може йти тільки в блок з ТАКИМ САМИМ title.
+  const queuesByTitle = {}; // title -> [{task, origin block}]
   blocksForDay.forEach(b=>{
     const tasks = relevantTasks.filter(t=>t.blockId===b.id);
-    tasks.forEach(t=>taskOrder.push({...t, originBlock:b.id}));
+    queuesByTitle[b.title] ||= [];
+    tasks.forEach(t=>queuesByTitle[b.title].push({...t, originBlock:b.id, originTitle: b.title}));
   });
 
-  // Now pack: go through blocks in order, for each block consume tasks starting from the first task originating at-or-before this block until block is full
+  // Розподіл по блоках. Кожен блок витягує завдання лише зі своєї черги (за title).
+  // Якщо блок цього типу повний, залишок переходить у НАСТУПНИЙ блок з ТИМ САМИМ title.
   const blockItems = {}; // blockId -> items
   const blockUsed  = {}; // blockId -> minutes consumed
   blocksForDay.forEach(b=>{ blockItems[b.id]=[]; blockUsed[b.id]=0; });
-  const queue = taskOrder.slice();
-  // distribute
+
   for (const b of blocksForDay){
     const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
-    // First consume tasks whose origin is THIS block
-    while (queue.length && queue[0].originBlock === b.id && blockUsed[b.id] < cap){
-      const t = queue.shift();
-      const free = cap - blockUsed[b.id];
-      const take = Math.min(free, t.duration);
-      blockItems[b.id].push({...t, mins:take, overflow:false});
-      blockUsed[b.id] += take;
-      if (take < t.duration){
-        // overflow remainder
-        queue.unshift({...t, duration: t.duration-take, originBlock: b.id, overflowed:true, title: t.title + " ↵"});
-        break;
-      }
+    const queue = queuesByTitle[b.title] || [];
+    // Резервуємо позицію поточного часу: якщо хоча б одне завдання у черзі має startMinInBlock,
+    // обрізаємо початок блоку (заповнення починається з цієї позиції)
+    const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.blockId === b.id);
+    if (dropAtNow){
+      blockUsed[b.id] = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
     }
-    // Then consume overflow from prev-block tasks already in queue (still originating earlier)
+    // Беремо завдання з черги цього title (FIFO)
     while (queue.length && blockUsed[b.id] < cap){
       const t = queue.shift();
-      if (t.originBlock !== b.id && !t.overflowed){
-        queue.unshift(t); break;
-      }
       const free = cap - blockUsed[b.id];
       const take = Math.min(free, t.duration);
-      blockItems[b.id].push({...t, mins:take, overflow:true});
+      blockItems[b.id].push({...t, mins:take, overflow: t.originBlock !== b.id});
       blockUsed[b.id] += take;
       if (take < t.duration){
-        queue.unshift({...t, duration:t.duration-take, overflowed:true});
+        // Залишок переходить у наступний блок з тим же title (через ту саму чергу)
+        queue.unshift({...t, duration: t.duration-take, overflowed:true, title: t.title + (t.title.endsWith(" ↵")?"":" ↵") });
         break;
       }
     }
@@ -2448,6 +2588,139 @@ function computeBlockFill(block, date){
   return { items, pct, usedMin: used, projectColor };
 }
 
+/* Drag блоку: перетягуємо за wb-head, змінюємо dow та start/end (зберігаючи тривалість) */
+function attachBlockDrag(el, block){
+  const head = el.querySelector(".wb-head");
+  if (!head) return;
+  head.addEventListener("pointerdown",(ev)=>{
+    if (ev.button !== 0) return;
+    ev.stopPropagation();
+    const startX = ev.clientX, startY = ev.clientY;
+    const grid = document.getElementById("weekGrid");
+    const gridRect = grid.getBoundingClientRect();
+    const colWidth = grid.children[1]?.getBoundingClientRect().width || 100;
+    let dragging = false;
+    let origDow = block.dow;
+    let origStart = minutesFromHHMM(block.start);
+    let origEnd   = minutesFromHHMM(block.end);
+    const duration = origEnd - origStart;
+
+    const onMove = (e)=>{
+      if (!dragging){
+        if (Math.hypot(e.clientX-startX, e.clientY-startY) < 5) return;
+        dragging = true;
+        el.classList.add("dragging-block");
+        head.setPointerCapture?.(ev.pointerId);
+      }
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const ddow = Math.round(dx / colWidth);
+      // 15-хвилинний крок по вертикалі
+      const dmin = Math.round(dy / HOUR_H * 60 / 15) * 15;
+      const newDow = Math.max(0, Math.min(6, origDow + ddow));
+      const newStart = Math.max(0, Math.min(24*60 - duration, origStart + dmin));
+      const newEnd = newStart + duration;
+      // Візуально: зміщуємо el прямо
+      const top = (newStart - HOUR_START*60)/60 * HOUR_H;
+      el.style.top = top + "px";
+      // Перенесемо в іншу колонку
+      const targetCol = grid.children[1 + newDow];
+      if (targetCol && el.parentElement !== targetCol) targetCol.appendChild(el);
+      el._pendingDow = newDow;
+      el._pendingStart = newStart;
+      el._pendingEnd = newEnd;
+    };
+    const onUp = (e)=>{
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      el.classList.remove("dragging-block");
+      if (!dragging) return;
+      el._suppressClick = true;
+      block.dow = el._pendingDow;
+      block.start = hhmmFromMinutes(el._pendingStart);
+      block.end   = hhmmFromMinutes(el._pendingEnd);
+      // Якщо це template (weekId=null), зміна дня змінює всі тижні. Так і має бути.
+      persist();
+      renderWeek();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+/* Drag завдання, що знаходиться всередині блоку — переносити в інший блок */
+function attachInBlockTaskDrag(tEl, task, blockEl){
+  tEl.addEventListener("pointerdown",(ev)=>{
+    if (ev.button !== 0) return;
+    ev.stopPropagation();
+    const startX = ev.clientX, startY = ev.clientY;
+    let dragging = false;
+    let ghost = null;
+    let currentTarget = null;
+    const onMove = (e)=>{
+      if (!dragging){
+        if (Math.hypot(e.clientX-startX, e.clientY-startY) < 5) return;
+        dragging = true;
+        ghost = document.createElement("div");
+        ghost.className = "drag-ghost";
+        ghost.textContent = task.title;
+        document.body.appendChild(ghost);
+        document.body.classList.add("dragging-task");
+        tEl.classList.add("dragging");
+      }
+      ghost.style.left = e.clientX + "px";
+      ghost.style.top  = e.clientY + "px";
+      const below = document.elementFromPoint(e.clientX, e.clientY);
+      const block = below?.closest(".wblock");
+      if (block !== currentTarget){
+        currentTarget?.classList.remove("drop-target");
+        currentTarget = block;
+        if (block && block !== blockEl) currentTarget.classList.add("drop-target");
+      }
+    };
+    const onUp = (e)=>{
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("dragging-task");
+      ghost?.remove();
+      tEl.classList.remove("dragging");
+      currentTarget?.classList.remove("drop-target");
+      if (!dragging){ blockEl._suppressClick = false; return; }
+      blockEl._suppressClick = true;
+      const below = document.elementFromPoint(e.clientX, e.clientY);
+      const targetBlockEl = below?.closest(".wblock");
+      if (targetBlockEl){
+        const newBlockId = targetBlockEl.dataset.blockId;
+        if (newBlockId && newBlockId !== task.blockId){
+          task.blockId = newBlockId;
+          task.weekId  = state.weekStart;
+          // При drop у блок з поточним часом — фіксуємо позицію
+          maybeSetDropAtNow(task, newBlockId);
+          persist(); renderWeek(); renderTaskList();
+        }
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+// Якщо drop у блок, що містить поточну позицію часу — позначаємо стартову точку
+function maybeSetDropAtNow(task, blockId){
+  const b = state.blocks.find(x=>x.id===blockId);
+  if (!b) return;
+  const now = new Date();
+  const todayDow = (now.getDay()+6)%7;
+  if (b.dow !== todayDow) { delete task.startMinInBlock; return; }
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const bs = minutesFromHHMM(b.start), be = minutesFromHHMM(b.end);
+  if (nowMin >= bs && nowMin <= be){
+    task.startMinInBlock = nowMin - bs; // зсув від початку блоку
+  } else {
+    delete task.startMinInBlock;
+  }
+}
+
 function editBlock(block){
   const isTemplate = block.weekId === null;
   openModal({
@@ -2460,10 +2733,14 @@ function editBlock(block){
         options:["Mo","Di","Mi","Do","Fr","Sa","So"].map((n,i)=>({id:String(i), name:n}))},
       { key:"scope", label:"Gültigkeit", type:"select", value:isTemplate?"template":"once",
         options:[{id:"template",name:"Jede Woche (Vorlage)"},{id:"once",name:"Nur diese Woche"}]},
+      // Колір блоку (опція)
+      { key:"color", label:"Farbe", type:"color-pick", value: block.color || "#9a9a95" },
+      // Опція "повторювати щодня" — створює клонів на всі 7 днів тижня
+      { key:"daily", label:"Jeden Tag wiederholen (erstellt 7 Blöcke)", type:"check", value: false },
     ],
     onDelete:()=>{
       state.blocks = state.blocks.filter(b=>b.id!==block.id);
-      // detach tasks
+      // Відв'язуємо задачі від видаленого блоку
       state.tasks.forEach(t=>{ if (t.blockId===block.id) t.blockId = null; });
       closeModal(); renderWeek(); persist();
     },
@@ -2472,8 +2749,27 @@ function editBlock(block){
       block.start = v.start; block.end = v.end;
       block.dow = Number(v.dow);
       block.weekId = v.scope==="template" ? null : state.weekStart;
+      block.color = v.color || null;
       if (minutesFromHHMM(block.end) <= minutesFromHHMM(block.start)){
         block.end = hhmmFromMinutes(minutesFromHHMM(block.start)+30);
+      }
+      // Якщо вибрано "повторювати щодня" — створюємо копії для днів 0..6 (окрім поточного)
+      if (v.daily){
+        for (let d=0; d<7; d++){
+          if (d === block.dow) continue;
+          // Не створюємо дубль, якщо вже є блок з тим же title/start у цей день
+          const exists = state.blocks.some(b=>b.dow===d && b.title===block.title && b.start===block.start && b.weekId===block.weekId);
+          if (exists) continue;
+          state.blocks.push({
+            id: uid(),
+            dow: d,
+            start: block.start,
+            end: block.end,
+            title: block.title,
+            color: block.color,
+            weekId: block.weekId,
+          });
+        }
       }
       closeModal(); renderWeek(); persist();
     }
@@ -2494,6 +2790,7 @@ document.getElementById("weekGrid").addEventListener("dblclick",(e)=>{
     start: hhmmFromMinutes(mins),
     end:   hhmmFromMinutes(mins+60),
     title: "Neuer Block",
+    color: null,
     weekId: null
   };
   state.blocks.push(b);
@@ -2614,6 +2911,8 @@ function attachTaskDrag(el, t){
         if (b){
           t.blockId = b.id;
           t.weekId = state.weekStart;
+          // Якщо drop у блок з поточним часом — починаємо з позиції шкали часу
+          maybeSetDropAtNow(t, b.id);
           persist(); renderWeek(); renderTaskList();
           return;
         }

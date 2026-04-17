@@ -399,14 +399,16 @@
     position: absolute; top: 0; height: 100%;
     text-align:center;
     font-size: 10.5px;
+    line-height: 1.1;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
     border-right: 1px solid var(--line);
     display:flex; align-items:center; justify-content:center;
     flex-direction: column;
+    gap: 1px;
   }
-  .gantt-dayrow .cell .dw{ font-size:9px; color: var(--ink-4); text-transform: uppercase}
+  .gantt-dayrow .cell .dw{ font-size:9px; line-height: 1; color: var(--ink-4); text-transform: uppercase}
   .gantt-dayrow .cell.weekend{ background: var(--bg-soft); color: var(--ink-4)}
   .gantt-dayrow .cell.today{ color: var(--now); font-weight:500 }
 
@@ -460,6 +462,22 @@
   }
   .gantt-row .row-label .row-act:hover{ color: var(--ink); background: var(--bg-sunk) }
   .gantt-row.is-filtered .row-label{ background: var(--bg-sunk) }
+
+  /* Рядок-кнопка "+ Neues Projekt" у кінці Gantt-таблиці */
+  .gantt-row.add-project-row{
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .gantt-row.add-project-row:hover{ opacity: 1 }
+  .gantt-row.add-project-row .row-label{
+    color: var(--ink-3);
+    font-style: italic;
+    background: transparent;
+  }
+  .gantt-row.add-project-row:hover .row-label{
+    color: var(--ink);
+    background: var(--bg-soft);
+  }
   .gantt-row.group-hdr .row-label{ background: var(--bg-soft); color: var(--ink); font-weight: 500}
   .gantt-row.group-hdr.level-1 .row-label{ padding-left: 26px; font-weight:400 }
   .gantt-row.level-2 .row-label{ padding-left: 42px; color:var(--ink-3)}
@@ -570,7 +588,7 @@
   }
 
   /* ========== Week view ========== */
-  .week-main{ flex:1; display:grid; grid-template-rows: 44px 1fr; overflow:hidden; background:var(--bg) }
+  .week-main{ flex:1; display:grid; grid-template-rows: 54px 1fr; overflow:hidden; background:var(--bg) }
   .week-head{
     display:grid;
     grid-template-columns: var(--time-col-w) repeat(7, 1fr);
@@ -585,6 +603,7 @@
   .week-head .dh:first-of-type{ border-left: 0}
   .week-head .dh .dname{
     font-size: 10.5px;
+    line-height: 1.1;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--ink-4);
@@ -592,6 +611,7 @@
   .week-head .dh .dnum{
     font-family: var(--font-display);
     font-size: 17px;
+    line-height: 1.2;
     color: var(--ink);
     font-feature-settings:"onum";
   }
@@ -645,6 +665,8 @@
     overflow:hidden;
     cursor: pointer;
     display:flex; flex-direction:column;
+    user-select: none;
+    -webkit-user-select: none;
   }
   .wblock.template{ border-style: dashed; background: #fdfdfc}
   /* Кольорова смужка зверху блоку — показує колір блоку (set через style.background) */
@@ -1014,15 +1036,10 @@
 
     <!-- ============ GANTT ============ -->
     <section id="gantt-view" class="view active">
-      <!-- Об'єднана колонка: вже немає окремого sidebar.
-           Всі дії над проектами — у самій Gantt-таблиці. -->
-      <div class="gantt-main full">
-        <!-- Toolbar над Gantt-таблицею: фільтр всіх проектів + додати проект -->
-        <div class="gantt-toolbar">
-          <button class="pill-btn ghost" id="ganttAllProjects" title="Alle Projekte zeigen">Alle Projekte</button>
-          <span class="count" id="projCount">0</span>
-          <button class="pill-btn" id="addProjectBtn">+ Neues Projekt</button>
-        </div>
+      <!-- Об'єднана колонка: немає окремого sidebar, немає toolbar.
+           Фільтр проекту — клік на його назві у таблиці (повторний клік скасовує).
+           Додати проект — кнопка-рядок у кінці списку. -->
+      <div class="gantt-main">
         <div class="gantt-monthrow" id="ganttMonths"></div>
         <div class="gantt-dayrow" id="ganttDays"></div>
         <div class="gantt-scroll" id="ganttScroll">
@@ -1034,7 +1051,9 @@
             <div class="now-line" id="ganttNow"></div>
           </div>
         </div>
-        <!-- Прихований контейнер: renderProjectTree() рендерить сюди (заглушка для сумісності) -->
+        <!-- Приховані вузли для сумісності: кнопка додавання та tree (рендериться сюди з історії) -->
+        <button id="addProjectBtn" style="display:none"></button>
+        <span id="projCount" style="display:none"></span>
         <div id="projectTree" style="display:none"></div>
       </div>
     </section>
@@ -1900,8 +1919,18 @@ function renderGantt(){
     });
   });
 
-  rowsHost.style.height = (rows.length*rowH)+"px";
-  inner.style.height = Math.max(rows.length*rowH, document.getElementById("ganttScroll").clientHeight)+"px";
+  // Додатковий рядок у кінці: кнопка "+ Neues Projekt"
+  const addRow = document.createElement("div");
+  addRow.className = "gantt-row add-project-row";
+  addRow.style.top = (rows.length*rowH)+"px";
+  addRow.style.position = "absolute";
+  addRow.style.left = 0; addRow.style.right = 0;
+  addRow.innerHTML = `<div class="row-label add-label">+ Neues Projekt</div>`;
+  addRow.onclick = ()=>editProject(null);
+  rowsHost.appendChild(addRow);
+
+  rowsHost.style.height = ((rows.length+1)*rowH)+"px";
+  inner.style.height = Math.max((rows.length+1)*rowH, document.getElementById("ganttScroll").clientHeight)+"px";
 
   // grid
   const grid = document.getElementById("ganttGrid");
@@ -2320,8 +2349,9 @@ document.getElementById("ganttRows").addEventListener("click",(e)=>{
   }
 });
 
-// Кнопки toolbar Gantt
-document.getElementById("ganttAllProjects").addEventListener("click", ()=>{
+// Кнопки toolbar Gantt (toolbar прибрано, але лишаємо безпечну перевірку)
+const ganttAllBtn = document.getElementById("ganttAllProjects");
+if (ganttAllBtn) ganttAllBtn.addEventListener("click", ()=>{
   state.selectedProjectId = null;
   renderGantt();
   persist();
@@ -2679,6 +2709,7 @@ function attachBlockDrag(el, block){
     // Не стартуємо drag, якщо натиснули на завдання всередині або ручку resize
     if (ev.target.closest(".wb-task")) return;
     if (ev.target.closest(".wb-resize")) return;
+    ev.preventDefault();
     ev.stopPropagation();
     const startX = ev.clientX, startY = ev.clientY;
     const grid = document.getElementById("weekGrid");
@@ -2782,6 +2813,8 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
           task.weekId  = state.weekStart;
           // При drop у блок з поточним часом — фіксуємо позицію
           maybeSetDropAtNow(task, newBlockId);
+          // Якщо task не вміщається — створити додатковий блок з тим же title
+          ensureOverflowBlock(task, newBlockId);
           persist(); renderWeek(); renderTaskList();
         }
       } else {
@@ -2793,6 +2826,50 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  });
+}
+
+// Гарантує, що для task вистачає місця у ланцюжку блоків з тою ж назвою того ж дня;
+// якщо ні — автоматично створює новий блок з тою ж назвою, щоб overflow мав куди перетекти.
+function ensureOverflowBlock(task, blockId){
+  const block = state.blocks.find(b=>b.id===blockId);
+  if (!block) return;
+  // Дата цього блоку у поточному тижні
+  const ws = parseISO(state.weekStart);
+  const dayDate = addDays(ws, block.dow);
+  const dayISO = iso(dayDate);
+  const allForDay = getBlocksForDay(block.dow, dayISO).slice().sort((a,b)=>minutesFromHHMM(a.start)-minutesFromHHMM(b.start));
+  const sameTitle = allForDay.filter(b=>b.title === block.title);
+  const totalCap = sameTitle.reduce((s,b)=>s + (minutesFromHHMM(b.end)-minutesFromHHMM(b.start)), 0);
+  // Усі задачі, приписані до блоків цього ланцюжка
+  const tasksInChain = state.tasks.filter(t=>
+    !t.done && t.weekId===state.weekStart &&
+    sameTitle.some(b=>b.id===t.blockId)
+  );
+  const totalNeeded = tasksInChain.reduce((s,t)=>s+t.duration, 0);
+  if (totalNeeded <= totalCap) return;
+  const overflow = totalNeeded - totalCap;
+  // Знаходимо вільний слот одразу після останнього блоку з тою ж назвою
+  const last = sameTitle[sameTitle.length-1];
+  let freeStart = minutesFromHHMM(last.end);
+  for (const b of allForDay){
+    const bs = minutesFromHHMM(b.start);
+    const be = minutesFromHHMM(b.end);
+    if (be <= freeStart) continue;
+    if (bs > freeStart) break; // знайшли вільне вікно
+    freeStart = be; // зсуваємось за цей блок
+  }
+  const newStart = Math.min(freeStart, 24*60 - 15);
+  const newEnd   = Math.min(24*60, newStart + Math.max(15, overflow));
+  if (newEnd <= newStart) return;
+  state.blocks.push({
+    id: uid(),
+    dow: block.dow,
+    start: hhmmFromMinutes(newStart),
+    end:   hhmmFromMinutes(newEnd),
+    title: block.title,
+    color: block.color || null,
+    weekId: block.weekId,
   });
 }
 
@@ -3021,6 +3098,8 @@ function attachTaskDrag(el, t){
           t.weekId = state.weekStart;
           // Якщо drop у блок з поточним часом — починаємо з позиції шкали часу
           maybeSetDropAtNow(t, b.id);
+          // Якщо task не вміщається — створити додатковий блок з тим же title
+          ensureOverflowBlock(t, b.id);
           persist(); renderWeek(); renderTaskList();
           return;
         }

@@ -2473,10 +2473,12 @@ function renderWeekBlock(col, block, date){
   // Заповнення блоку (підраховує задачі + overflow ланцюжок)
   const fill = computeBlockFill(block, date);
   el.style.color = fill.projectColor || "var(--ink-3)";
-  // Колір блоку (якщо встановлений) — фон + смужка зверху
+  // Колір блоку: рамка переймає обраний колір (чітко, без прозорості);
+  // фон — легкий відтінок цього ж кольору
   if (block.color){
     el.style.background = hexWithAlpha(block.color, 0.10);
-    el.style.borderColor = hexWithAlpha(block.color, 0.45);
+    el.style.borderColor = block.color;
+    el.style.borderWidth = "2px";
   }
 
   el.innerHTML = `
@@ -2507,15 +2509,19 @@ function renderWeekBlock(col, block, date){
   `;
   col.appendChild(el);
 
-  // Клік: редагувати блок або задачу всередині
+  // Клік: редагувати задачу всередині (блок — тільки по dblclick)
   el.addEventListener("click",(e)=>{
     if (el._suppressClick){ el._suppressClick = false; return; }
     if (e.target.closest(".wb-task")){
       const tid = e.target.closest(".wb-task").dataset.taskId;
       const t = state.tasks.find(x=>x.id===tid);
       if (t) editWeekTask(t);
-      return;
     }
+  });
+  // Подвійний клік — редагування блоку
+  el.addEventListener("dblclick",(e)=>{
+    if (e.target.closest(".wb-task")) return; // dblclick по task не відкриває блок
+    e.stopPropagation();
     editBlock(block);
   });
 
@@ -2665,12 +2671,14 @@ function attachBlockResize(el, block){
   });
 }
 
-/* Drag блоку: перетягуємо за wb-head, змінюємо dow та start/end (зберігаючи тривалість) */
+/* Drag блоку: перетягуємо за БУДЬ-ЯКУ частину (окрім wb-task і wb-resize);
+   змінюємо dow та start/end (зберігаючи тривалість) */
 function attachBlockDrag(el, block){
-  const head = el.querySelector(".wb-head");
-  if (!head) return;
-  head.addEventListener("pointerdown",(ev)=>{
+  el.addEventListener("pointerdown",(ev)=>{
     if (ev.button !== 0) return;
+    // Не стартуємо drag, якщо натиснули на завдання всередині або ручку resize
+    if (ev.target.closest(".wb-task")) return;
+    if (ev.target.closest(".wb-resize")) return;
     ev.stopPropagation();
     const startX = ev.clientX, startY = ev.clientY;
     const grid = document.getElementById("weekGrid");
@@ -2687,7 +2695,7 @@ function attachBlockDrag(el, block){
         if (Math.hypot(e.clientX-startX, e.clientY-startY) < 5) return;
         dragging = true;
         el.classList.add("dragging-block");
-        head.setPointerCapture?.(ev.pointerId);
+        el.setPointerCapture?.(ev.pointerId);
       }
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
@@ -3203,10 +3211,14 @@ function openModal({ title, fields, onSubmit, onDelete, extraAction }){
     e.preventDefault();
     const v = {};
     fields.forEach(f=>{
+      // color-pick не має input з name — збираємо його окремо з активного swatch
+      if (f.type === "color-pick"){
+        v[f.key] = form.querySelector('.color-row .sw.active')?.dataset.color || f.value;
+        return;
+      }
       const el = form.querySelector(`[name="${f.key}"]`);
       if (!el) return;
       if (f.type==="check") v[f.key] = el.checked;
-      else if (f.type==="color-pick") v[f.key] = form.querySelector('.color-row .sw.active')?.dataset.color || f.value;
       else v[f.key] = el.value;
     });
     onSubmit(v);

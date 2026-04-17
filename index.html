@@ -2966,13 +2966,14 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
         if (newBlockId && newBlockId !== task.blockId){
           const newBlock = state.blocks.find(b=>b.id === newBlockId);
           if (newBlock && !chainFitsAfterAdding(newBlock.title, task, newBlockId)){
-            // Не вистачає місця у ланцюжку з тою ж назвою — миготимо червоним
             flashBlockRed(targetBlockEl);
             return;
           }
-          task.blockId = newBlockId;
+          // Фактичний блок — перший у ланцюжку з вільним місцем
+          const actual = firstFreeBlockInChain(newBlock.title, task) || newBlock;
+          task.blockId = actual.id;
           task.weekId  = state.weekStart;
-          maybeSetDropAtNow(task, newBlockId);
+          maybeSetDropAtNow(task, actual.id);
           persist(); renderWeek(); renderTaskList();
         }
       } else {
@@ -3029,6 +3030,21 @@ function ensureOverflowBlock(task, blockId){
     color: block.color || null,
     weekId: block.weekId,
   });
+}
+
+// Перший блок ланцюжка (з тою ж назвою), у якому ще є вільне місце для task.
+// Повертає null, якщо всі блоки ланцюжка заповнені.
+function firstFreeBlockInChain(title, task){
+  const chain = getBlocksForWeek(title);
+  for (const b of chain){
+    const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
+    const others = state.tasks.filter(t =>
+      !t.done && t.id !== task.id && t.weekId === state.weekStart && t.blockId === b.id
+    );
+    const used = others.reduce((s,t)=>s + t.duration, 0);
+    if (used < cap) return b;
+  }
+  return null;
 }
 
 // Якщо drop у блок, що містить поточну позицію часу — позначаємо стартову точку
@@ -3101,9 +3117,14 @@ function editBlock(block){
       { key:"daily", label:"Jeden Tag wiederholen (erstellt 7 Blöcke)", type:"check", value: false },
     ],
     onDelete:()=>{
-      state.blocks = state.blocks.filter(b=>b.id!==block.id);
-      // Відв'язуємо задачі від видаленого блоку
-      state.tasks.forEach(t=>{ if (t.blockId===block.id) t.blockId = null; });
+      // Видаляємо не лише override цього тижня, а й template з тою ж назвою/dow/start —
+      // інакше template "виринає" на місце видаленого override і блок виглядає пунктирним.
+      const idsToRemove = state.blocks
+        .filter(b => b.id === block.id ||
+          (b.title === block.title && b.dow === block.dow && b.start === block.start))
+        .map(b => b.id);
+      state.blocks = state.blocks.filter(b => !idsToRemove.includes(b.id));
+      state.tasks.forEach(t => { if (idsToRemove.includes(t.blockId)) t.blockId = null; });
       closeModal(); renderWeek(); persist();
     },
     // Додаткові кнопки редактора блоку
@@ -3127,15 +3148,24 @@ function editBlock(block){
       {
         label: "Folge-Blöcke gleicher Name löschen",
         fn: ()=>{
+          if (!confirm(`Alle nachfolgenden Blöcke mit dem Namen "${block.title}" löschen?`)) return;
           const n = deleteLaterBlocksWithSameTitle(block);
           if (n === 0){
             alert("Keine nachfolgenden Blöcke mit gleichem Namen gefunden.");
             return;
           }
-          if (!confirm(`${n} Folge-Block(e) mit dem Namen "${block.title}" wirklich löschen?`)){
-            // Відкат — deleteLaterBlocksWithSameTitle уже модифікував state; поверталась дія через Undo
-            return;
-          }
+          closeModal(); renderWeek(); persist();
+        }
+      },
+      {
+        label: "Alle Blöcke mit diesem Namen löschen",
+        fn: ()=>{
+          if (!confirm(`Alle Blöcke mit dem Namen "${block.title}" (alle Tage, alle Wochen) löschen?`)) return;
+          const idsToRemove = state.blocks
+            .filter(b => b.title === block.title)
+            .map(b => b.id);
+          state.blocks = state.blocks.filter(b => !idsToRemove.includes(b.id));
+          state.tasks.forEach(t => { if (idsToRemove.includes(t.blockId)) t.blockId = null; });
           closeModal(); renderWeek(); persist();
         }
       },
@@ -3305,15 +3335,16 @@ function attachTaskDrag(el, t){
       if (block){
         const b = state.blocks.find(x=>x.id===block.dataset.blockId);
         if (b){
-          // Перевірка: чи влізе task у ланцюжок блоків з тою ж назвою (весь тиждень)
           if (!chainFitsAfterAdding(b.title, t, b.id)){
-            // Не вистачає місця — миготимо червоним, не призначаємо
             flashBlockRed(block);
             return;
           }
-          t.blockId = b.id;
+          // Фактичний блок = перший блок ланцюжка з вільним місцем (щоб task не "втрачав" позицію)
+          const actual = firstFreeBlockInChain(b.title, t) || b;
+          t.blockId = actual.id;
           t.weekId = state.weekStart;
-          maybeSetDropAtNow(t, b.id);
+          // Якщо фактичний блок містить поточний час — task починається під лінією
+          maybeSetDropAtNow(t, actual.id);
           persist(); renderWeek(); renderTaskList();
           return;
         }

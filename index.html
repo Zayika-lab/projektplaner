@@ -2822,12 +2822,13 @@ function buildFillCache(){
   const titles = new Set();
   state.blocks.forEach(b=>titles.add(b.title));
   titles.forEach(title=>{
-    const chain = getBlocksForWeek(title);
-    chain.forEach(b=>{ cache.blocks[b.id] = { items: [], used: 0 }; });
+    // ВАЖЛИВО: past-блоки виключаємо з ланцюжка — у них нічого не показуємо і не пакуємо.
+    const fullChain = getBlocksForWeek(title);
+    const chain = fullChain.filter(b => !isBlockInPast(b));
+    // Для past-блоків все одно треба створити пусті кеш-записи (щоб render не зламався)
+    fullChain.forEach(b=>{ cache.blocks[b.id] = { items: [], used: 0 }; });
     if (!chain.length) return;
-    // Всі задачі ланцюжка в одну спільну чергу. Пакуємо у блоки послідовно,
-    // починаючи з ПЕРШОГО блоку (найраніший за часом). Незалежно від blockId —
-    // задача завжди попадає у найраніший доступний блок з тою ж назвою.
+    // Всі задачі non-past блоків збираємо в одну чергу; пакуємо з першого non-past.
     const queue = [];
     chain.forEach(b=>{
       const own = state.tasks

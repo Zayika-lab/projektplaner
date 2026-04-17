@@ -753,6 +753,21 @@
     z-index: 50;
     box-shadow: 0 6px 20px rgba(0,0,0,.18);
   }
+  /* Ctrl/Cmd + drag → режим копіювання: тонке підсвічення + зелена рамка */
+  .wblock.dragging-block.copy-mode{
+    outline: 2px dashed #4fa47f;
+    outline-offset: 2px;
+    cursor: copy;
+  }
+  .wblock.dragging-block.copy-mode::after{
+    content: "+ Kopie";
+    position: absolute;
+    top: 4px; right: 6px;
+    font-size: 10px;
+    color: #4fa47f;
+    font-weight: 600;
+    pointer-events: none;
+  }
   /* Ручки для зміни розміру блоку за верх/низ */
   .wblock .wb-resize{
     position: absolute;
@@ -3030,6 +3045,8 @@ function attachBlockDrag(el, block){
       // Візуально: зміщуємо el прямо
       const top = (newStart - HOUR_START*60)/60 * HOUR_H;
       el.style.top = top + "px";
+      // Ctrl/Cmd → підсвічуємо «режим копіювання»
+      el.classList.toggle("copy-mode", e.ctrlKey || e.metaKey);
       // Перенесемо в іншу колонку
       const targetCol = grid.children[1 + newDow];
       if (targetCol && el.parentElement !== targetCol) targetCol.appendChild(el);
@@ -3041,12 +3058,27 @@ function attachBlockDrag(el, block){
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       el.classList.remove("dragging-block");
+      el.classList.remove("copy-mode");
       if (!dragging) return;
       el._suppressClick = true;
-      block.dow = el._pendingDow;
-      block.start = hhmmFromMinutes(el._pendingStart);
-      block.end   = hhmmFromMinutes(el._pendingEnd);
-      // Якщо це template (weekId=null), зміна дня змінює всі тижні. Так і має бути.
+      const isCopy = e.ctrlKey || e.metaKey;
+      if (isCopy){
+        // Ctrl/Cmd + drag → створюємо КОПІЮ блоку на новій позиції, оригінал лишаємо
+        state.blocks.push({
+          id: uid(),
+          dow: el._pendingDow,
+          start: hhmmFromMinutes(el._pendingStart),
+          end:   hhmmFromMinutes(el._pendingEnd),
+          title: block.title,
+          color: block.color || null,
+          weekId: block.weekId,
+        });
+      } else {
+        // Звичайний drag — мутуємо оригінал
+        block.dow = el._pendingDow;
+        block.start = hhmmFromMinutes(el._pendingStart);
+        block.end   = hhmmFromMinutes(el._pendingEnd);
+      }
       persist();
       renderWeek();
     };

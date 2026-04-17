@@ -729,11 +729,12 @@
   .wblock{
     position: absolute;
     left: 3px; right: 3px;
-    margin-top: 18px; /* місце для заголовка, який тепер над рамкою */
+    /* Без margin-top: блок має стояти точно на своєму часі. Заголовок (wb-head)
+       absolute-позиціонований над блоком і виходить за межі через overflow:visible. */
     border-radius: var(--radius-sm);
     background: var(--bg-soft);
     border: 1px solid var(--line-strong);
-    overflow: visible; /* дозволяємо заголовку та leader-лініям виходити за межі рамки */
+    overflow: visible;
     cursor: pointer;
     display:flex; flex-direction:column;
     user-select: none;

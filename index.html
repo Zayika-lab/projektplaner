@@ -1561,6 +1561,9 @@ function persist(){
 
 function setView(v){
   state.ui = state.ui || {}; state.ui.view = v;
+  // Зберігаємо останній активний вид у persistent-полі, щоб він переживав перезапуск.
+  state.lastView = v;
+  persist();
   document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active", el.id === v+"-view"));
   document.querySelectorAll("#viewSwitcher button").forEach(b=>b.classList.toggle("active", b.dataset.view===v));
   // Повзунок масштабу актуальний лише для Gantt
@@ -3128,18 +3131,15 @@ function editBlock(block){
   const isTemplate = block.weekId === null;
   openModal({
     title: isTemplate ? "Block (Vorlage – wöchentlich)" : "Block (nur diese Woche)",
+    // Прибрали select "scope" та checkbox "daily" — щоб блок випадково НЕ поширювався
+    // на інші дні/тижні. Для цього є окремі кнопки знизу модалу.
     fields:[
       { key:"title", label:"Titel", value: block.title},
       { key:"start", label:"Start", type:"time", value: block.start},
       { key:"end",   label:"Ende",  type:"time", value: block.end},
       { key:"dow",   label:"Wochentag", type:"select", value:String(block.dow),
         options:["Mo","Di","Mi","Do","Fr","Sa","So"].map((n,i)=>({id:String(i), name:n}))},
-      { key:"scope", label:"Gültigkeit", type:"select", value:isTemplate?"template":"once",
-        options:[{id:"template",name:"Jede Woche (Vorlage)"},{id:"once",name:"Nur diese Woche"}]},
-      // Колір блоку (опція)
       { key:"color", label:"Farbe", type:"color-pick", value: block.color || "#9a9a95" },
-      // Опція "повторювати щодня" — створює клонів на всі 7 днів тижня
-      { key:"daily", label:"Jeden Tag wiederholen (erstellt 7 Blöcke)", type:"check", value: false },
     ],
     onDelete:()=>{
       // Видаляємо не лише override цього тижня, а й template з тою ж назвою/dow/start —
@@ -3152,7 +3152,8 @@ function editBlock(block){
       state.tasks.forEach(t => { if (idsToRemove.includes(t.blockId)) t.blockId = null; });
       closeModal(); renderWeek(); persist();
     },
-    // Додаткові кнопки редактора блоку
+    // Усі поширення блоку (на наступний день / щодня / на кожен тиждень) —
+    // явні дії через кнопки. Жоден із параметрів редактора блоку не розширює його автоматично.
     extraAction: [
       {
         label: "→ Auf nächsten Tag kopieren",
@@ -3167,6 +3168,35 @@ function editBlock(block){
             color: block.color || null,
             weekId: block.weekId,
           });
+          closeModal(); renderWeek(); persist();
+        }
+      },
+      {
+        label: "Jeden Tag duplizieren (7 Tage)",
+        fn: ()=>{
+          if (!confirm(`Block "${block.title}" auf alle 7 Wochentage duplizieren?`)) return;
+          for (let d=0; d<7; d++){
+            if (d === block.dow) continue;
+            const exists = state.blocks.some(b=>b.dow===d && b.title===block.title && b.start===block.start && b.weekId===block.weekId);
+            if (exists) continue;
+            state.blocks.push({
+              id: uid(),
+              dow: d,
+              start: block.start,
+              end: block.end,
+              title: block.title,
+              color: block.color || null,
+              weekId: block.weekId,
+            });
+          }
+          closeModal(); renderWeek(); persist();
+        }
+      },
+      {
+        label: isTemplate ? "Nur diese Woche behalten" : "Als wöchentliche Vorlage markieren",
+        fn: ()=>{
+          // Перемикає між template (weekId=null) та override (weekId=state.weekStart)
+          block.weekId = isTemplate ? state.weekStart : null;
           closeModal(); renderWeek(); persist();
         }
       },
@@ -3199,28 +3229,10 @@ function editBlock(block){
       block.title = v.title.trim() || block.title;
       block.start = v.start; block.end = v.end;
       block.dow = Number(v.dow);
-      block.weekId = v.scope==="template" ? null : state.weekStart;
       block.color = v.color || null;
+      // weekId НЕ змінюємо через форму — лише через окрему кнопку вище (Vorlage/diese Woche).
       if (minutesFromHHMM(block.end) <= minutesFromHHMM(block.start)){
         block.end = hhmmFromMinutes(minutesFromHHMM(block.start)+30);
-      }
-      // Якщо вибрано "повторювати щодня" — створюємо копії для днів 0..6 (окрім поточного)
-      if (v.daily){
-        for (let d=0; d<7; d++){
-          if (d === block.dow) continue;
-          // Не створюємо дубль, якщо вже є блок з тим же title/start у цей день
-          const exists = state.blocks.some(b=>b.dow===d && b.title===block.title && b.start===block.start && b.weekId===block.weekId);
-          if (exists) continue;
-          state.blocks.push({
-            id: uid(),
-            dow: d,
-            start: block.start,
-            end: block.end,
-            title: block.title,
-            color: block.color,
-            weekId: block.weekId,
-          });
-        }
       }
       closeModal(); renderWeek(); persist();
     }
@@ -3667,6 +3679,11 @@ async function bootLoadData(){
     state = defaultState();
   }
   render();
+  // Відновлюємо останній активний вид (gantt/week/calendar) після перезавантаження
+  const lastView = state.lastView;
+  if (lastView && ["gantt","week","calendar"].includes(lastView)){
+    setView(lastView);
+  }
   // Відписуємось від попередньої підписки (якщо була)
   if (unsubscribeStore){ try{ unsubscribeStore(); }catch{} unsubscribeStore = null; }
   unsubscribeStore = Store.subscribe((data)=>{

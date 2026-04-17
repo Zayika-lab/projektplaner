@@ -185,6 +185,17 @@
     border: 0;
   }
 
+  /* ===== Кнопка налаштувань ===== */
+  .settings-btn{
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    color: var(--ink-3);
+    font-size: 16px;
+    line-height: 1;
+    transition: background .15s, color .15s;
+  }
+  .settings-btn:hover{ background: var(--bg-sunk); color: var(--ink) }
+
   /* ===== Інформація про користувача у верхній панелі ===== */
   .user-info{
     margin-left: auto;
@@ -1047,6 +1058,12 @@
       <span class="dot"></span><span class="txt">lokal</span>
     </div>
 
+    <!-- Кнопка відміни останньої дії (Undo) -->
+    <button class="settings-btn" id="undoBtn" title="Rückgängig (Ctrl+Z) — letzte 10 Aktionen">↶</button>
+
+    <!-- Кнопка відкриття налаштувань додатку -->
+    <button class="settings-btn" id="settingsBtn" title="Einstellungen">⚙</button>
+
     <!-- Блок інформації про користувача (аватар + ім'я + вихід) -->
     <div class="user-info" id="userInfo" style="display:none">
       <img class="avatar" id="userAvatar" alt="">
@@ -1494,8 +1511,40 @@ function projectPath(task){
   return [p?.name, sp?.name, st?.name].filter(Boolean).join(" / ");
 }
 
+// ═══════ Undo stack ═══════
+// undoStack містить знімки стану ПІСЛЯ кожної persist(). Максимум 10.
+// Undo: викидаємо останній знімок (це поточний стан), застосовуємо попередній.
+const UNDO_LIMIT = 10;
+const undoStack = [];
+let initialSnapshot = null;       // знімок стартового стану (до перших змін)
+let _suppressUndoPush = false;    // щоб undo сам собою не пушив у стек
+function deepSnap(s){
+  const copy = JSON.parse(JSON.stringify(s));
+  delete copy.ui;
+  return copy;
+}
+function undoLastAction(){
+  if (!undoStack.length) return;
+  _suppressUndoPush = true;
+  undoStack.pop(); // викидаємо «поточний» знімок
+  const prev = undoStack.length ? undoStack[undoStack.length-1] : initialSnapshot;
+  if (prev){
+    const ui = state.ui; // зберігаємо UI-стан (view, collapsed)
+    state = { ...prev };
+    state.ui = ui;
+    Store.save(state);
+    render();
+  }
+  _suppressUndoPush = false;
+}
+
 let saveTimer = null;
 function persist(){
+  // Знімаємо стан ПІСЛЯ мутації (перед збереженням) — для undo
+  if (!_suppressUndoPush){
+    undoStack.push(deepSnap(state));
+    while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>Store.save(state), 200);
 }
@@ -2440,14 +2489,24 @@ document.getElementById("ganttRows").addEventListener("dblclick",(e)=>{
    7. WEEK VIEW
    ═══════════════════════════════════════════════════════════════ */
 
-const HOUR_START = 6, HOUR_END = 22;
+// HOUR_START / HOUR_END тепер редаговані у налаштуваннях додатку.
+// Дефолтні значення; синхронізуються з state.settings перед кожним рендером.
+let HOUR_START = 6, HOUR_END = 22;
+function applyDayHourSettings(){
+  const s = state.settings || {};
+  const ds = Number(s.dayStart);
+  const de = Number(s.dayEnd);
+  HOUR_START = Number.isFinite(ds) && ds>=0 && ds<=23 ? ds : 6;
+  HOUR_END   = Number.isFinite(de) && de>HOUR_START && de<=24 ? de : 22;
+}
 const HOUR_H = 52;
 // Висота заголовку блоку (wb-head) — компенсується у spacer,
 // щоб task-міні-блок починався рівно на часовій лінії
 const WB_HEAD_HEIGHT = 26;
 
 function renderWeek(){
-  // Перебудовуємо кеш розподілу ланцюжків при кожному рендері
+  // Застосовуємо налаштування годин дня + перебудовуємо кеш розподілу
+  applyDayHourSettings();
   invalidateFillCache();
   const ws = parseISO(state.weekStart);
   const today = new Date(); today.setHours(0,0,0,0);
@@ -2569,12 +2628,12 @@ function renderWeekBlock(col, block, date){
     </div>
     <div class="wb-body">
       ${fill.items.map((it, idx)=>{
-        // Висота елемента пропорційна до хвилин
+        // Висота елемента пропорційна до хвилин (щоб кінець співпадав з правильним часом)
         let h = Math.round(it.mins * (HOUR_H/60));
+        // ПЕРШИЙ елемент (без spacer попереду) повинен компенсувати висоту заголовку
+        // wb-head: інакше task візуально "зсовується" нижче за свій реальний час-end.
+        if (idx === 0) h = Math.max(14, h - WB_HEAD_HEIGHT);
         if (it._spacer){
-          // Якщо перший item — spacer, компенсуємо висоту заголовку wb-head,
-          // щоб наступний task починався САМЕ під лінією часу (а не після head+spacer)
-          if (idx === 0) h = Math.max(0, h - WB_HEAD_HEIGHT);
           if (h <= 0) return "";
           return `<div class="wb-spacer" style="height:${h}px;flex:0 0 ${h}px"></div>`;
         }
@@ -2674,19 +2733,20 @@ function buildFillCache(){
     const chain = getBlocksForWeek(title);
     chain.forEach(b=>{ cache.blocks[b.id] = { items: [], used: 0 }; });
     if (!chain.length) return;
-    // Кожна задача починається у СВОЄМУ блоці. Залишок (overflow) передається у наступний
-    // блок ланцюжка. Це важливо: task у block2 НЕ «повертається» до block1.
-    let overflow = [];
-    for (const b of chain){
-      const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
+    // Всі задачі ланцюжка в одну спільну чергу. Пакуємо у блоки послідовно,
+    // починаючи з ПЕРШОГО блоку (найраніший за часом). Незалежно від blockId —
+    // задача завжди попадає у найраніший доступний блок з тою ж назвою.
+    const queue = [];
+    chain.forEach(b=>{
       const own = state.tasks
         .filter(t => !t.done && t.weekId === state.weekStart && t.blockId === b.id)
         .map(t => ({...t, originBlock: b.id, originTitle: b.title}));
-      // Черга блока: спершу overflow з попереднього, потім власні задачі
-      const queue = overflow.concat(own);
-      overflow = [];
-      // Spacer — якщо серед власних задач блока є одна з позначкою startMinInBlock
-      const dropAtNow = own.find(t=>t.startMinInBlock != null);
+      own.forEach(t => queue.push(t));
+    });
+    for (const b of chain){
+      const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
+      // Spacer — якщо перша задача у черзі має startMinInBlock і цей блок — її own
+      const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.originBlock === b.id);
       if (dropAtNow){
         const offset = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
         cache.blocks[b.id].used = offset;
@@ -2701,16 +2761,13 @@ function buildFillCache(){
         cache.blocks[b.id].items.push({...t, mins:take, overflow: t.originBlock !== b.id});
         cache.blocks[b.id].used += take;
         if (take < t.duration){
-          // Залишок — у overflow для наступного блока ланцюжка
+          // Залишок — у наступний блок ланцюжка
           queue.unshift({...t, duration: t.duration-take, overflowed:true,
             title: t.title + (t.title.endsWith(" ↵") ? "" : " ↵")});
           break;
         }
       }
-      // Все, що залишилось у черзі — передаємо далі
-      overflow = queue;
     }
-    // Якщо overflow непорожня — це означає, що не вистачило місця (drop-handler це вже перевіряє)
   });
   return cache;
 }
@@ -2990,6 +3047,42 @@ function maybeSetDropAtNow(task, blockId){
   }
 }
 
+// ═══════ Налаштування додатку ═══════
+// Відкриває модал з налаштуваннями (початок/кінець робочого дня).
+function openSettings(){
+  const s = state.settings || {};
+  const hours = Array.from({length:25}, (_,i)=>({id:String(i), name: pad(i)+":00"}));
+  openModal({
+    title: "Einstellungen",
+    fields: [
+      { key: "dayStart", label: "Tag-Start", type: "select", value: String(s.dayStart ?? 6), options: hours.slice(0, 24) },
+      { key: "dayEnd",   label: "Tag-Ende",  type: "select", value: String(s.dayEnd   ?? 22), options: hours.slice(1) },
+    ],
+    onSubmit: (v)=>{
+      const ds = Number(v.dayStart), de = Number(v.dayEnd);
+      if (!(de > ds)){
+        alert("Ende muss nach Start liegen.");
+        return;
+      }
+      state.settings = { ...(state.settings||{}), dayStart: ds, dayEnd: de };
+      closeModal(); render(); persist();
+    }
+  });
+}
+
+// Видаляє всі блоки з такою ж назвою, які йдуть ПІСЛЯ `block` у ланцюжку тижня.
+function deleteLaterBlocksWithSameTitle(block){
+  const chain = getBlocksForWeek(block.title);
+  const idx = chain.findIndex(b=>b.id === block.id);
+  if (idx < 0) return 0;
+  const toRemove = chain.slice(idx+1).map(b=>b.id);
+  if (!toRemove.length) return 0;
+  state.blocks = state.blocks.filter(b => !toRemove.includes(b.id));
+  // Відв'язуємо задачі від видалених блоків
+  state.tasks.forEach(t=>{ if (toRemove.includes(t.blockId)) t.blockId = null; });
+  return toRemove.length;
+}
+
 function editBlock(block){
   const isTemplate = block.weekId === null;
   openModal({
@@ -3013,23 +3106,40 @@ function editBlock(block){
       state.tasks.forEach(t=>{ if (t.blockId===block.id) t.blockId = null; });
       closeModal(); renderWeek(); persist();
     },
-    // Додаткова кнопка: копіює поточний блок на наступний день (dow+1, обгортка на 6 → 0)
-    extraAction: {
-      label: "→ Auf nächsten Tag kopieren",
-      fn: ()=>{
-        const nextDow = (block.dow + 1) % 7;
-        state.blocks.push({
-          id: uid(),
-          dow: nextDow,
-          start: block.start,
-          end: block.end,
-          title: block.title,
-          color: block.color || null,
-          weekId: block.weekId,
-        });
-        closeModal(); renderWeek(); persist();
-      }
-    },
+    // Додаткові кнопки редактора блоку
+    extraAction: [
+      {
+        label: "→ Auf nächsten Tag kopieren",
+        fn: ()=>{
+          const nextDow = (block.dow + 1) % 7;
+          state.blocks.push({
+            id: uid(),
+            dow: nextDow,
+            start: block.start,
+            end: block.end,
+            title: block.title,
+            color: block.color || null,
+            weekId: block.weekId,
+          });
+          closeModal(); renderWeek(); persist();
+        }
+      },
+      {
+        label: "Folge-Blöcke gleicher Name löschen",
+        fn: ()=>{
+          const n = deleteLaterBlocksWithSameTitle(block);
+          if (n === 0){
+            alert("Keine nachfolgenden Blöcke mit gleichem Namen gefunden.");
+            return;
+          }
+          if (!confirm(`${n} Folge-Block(e) mit dem Namen "${block.title}" wirklich löschen?`)){
+            // Відкат — deleteLaterBlocksWithSameTitle уже модифікував state; поверталась дія через Undo
+            return;
+          }
+          closeModal(); renderWeek(); persist();
+        }
+      },
+    ],
     onSubmit:(v)=>{
       block.title = v.title.trim() || block.title;
       block.start = v.start; block.end = v.end;
@@ -3372,6 +3482,8 @@ document.getElementById("calToday").onclick = ()=>{ state.calCursor = iso(new Da
 function openModal({ title, fields, onSubmit, onDelete, extraAction }){
   const root = document.getElementById("modalRoot");
   const box  = document.getElementById("modalBox");
+  // Нормалізуємо extraAction до масиву — щоб можна було передавати кілька кнопок
+  const extras = Array.isArray(extraAction) ? extraAction : (extraAction ? [extraAction] : []);
   box.innerHTML = `
     <h3>${escapeHtml(title)}</h3>
     <form id="modalForm">
@@ -3379,7 +3491,7 @@ function openModal({ title, fields, onSubmit, onDelete, extraAction }){
       <div class="modal-actions">
         <div class="left">
           ${onDelete ? `<button type="button" class="btn btn-danger" data-act="delete">Löschen</button>` : ""}
-          ${extraAction ? `<button type="button" class="btn btn-ghost" data-act="extra">${escapeHtml(extraAction.label)}</button>`:""}
+          ${extras.map((ex,i)=>`<button type="button" class="btn btn-ghost" data-act="extra-${i}">${escapeHtml(ex.label)}</button>`).join("")}
         </div>
         <div class="right">
           <button type="button" class="btn btn-ghost" data-act="cancel">Abbrechen</button>
@@ -3413,7 +3525,11 @@ function openModal({ title, fields, onSubmit, onDelete, extraAction }){
       if (act==="delete"){
         if (confirm("Wirklich löschen?")) onDelete?.();
       }
-      if (act==="extra") extraAction?.fn?.();
+      // extra-0, extra-1, ... — викликаємо відповідну функцію з масиву
+      if (act.startsWith("extra-")){
+        const idx = Number(act.slice(6));
+        extras[idx]?.fn?.();
+      }
     };
   });
   // color picker clicks
@@ -3526,6 +3642,20 @@ function startNowLineTick(){
     state.ganttDayW = Number(e.target.value) || 56;
     renderGantt();
     persist();
+  });
+
+  // Кнопка налаштувань: відкриває модал
+  document.getElementById("settingsBtn").addEventListener("click", openSettings);
+  // Кнопка "Назад" (undo)
+  document.getElementById("undoBtn").addEventListener("click", undoLastAction);
+  // Гарячі клавіші: Ctrl/Cmd+Z — undo
+  window.addEventListener("keydown",(e)=>{
+    if ((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key.toLowerCase()==="z"){
+      if (!document.activeElement?.matches?.("input,textarea,select")){
+        e.preventDefault();
+        undoLastAction();
+      }
+    }
   });
 
   startNowLineTick();

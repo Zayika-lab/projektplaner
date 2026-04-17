@@ -874,6 +874,17 @@
     width: 8px; height: 1px;
     background: var(--line-strong);
   }
+  /* Ручка на нижньому краї task-міні-блоку — для зміни duration */
+  .wblock .wb-task .wt-resize{
+    position: absolute;
+    left: 0; right: 0;
+    bottom: -3px;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 4;
+  }
+  .wblock .wb-task .wt-resize:hover{ background: rgba(0,0,0,0.1); border-radius: 2px }
+  .wblock .wb-task{ position: relative }
   /* Кнопка "×" для швидкого викидання завдання з блоку (повертає у список) */
   .wblock .wb-task .tx{
     flex: 0 0 auto;
@@ -2797,6 +2808,7 @@ function renderWeekBlock(col, block, date){
             <span class="ts">${it.mins}m</span>
             ${titleHtml}
             <span class="tx" data-act="detach" title="Aus Block entfernen">×</span>
+            <span class="wt-resize" data-act="resize" title="Dauer ändern"></span>
           </div>
         `;
       }).join("")}
@@ -2846,7 +2858,44 @@ function renderWeekBlock(col, block, date){
   el.querySelectorAll(".wb-task").forEach(tEl=>{
     const tid = tEl.dataset.taskId;
     const t = state.tasks.find(x=>x.id===tid);
-    if (t) attachInBlockTaskDrag(tEl, t, el);
+    if (t){
+      attachInBlockTaskDrag(tEl, t, el);
+      attachTaskResize(tEl, t);
+    }
+  });
+}
+
+/* Resize task-міні-блоку: тягнемо ручку знизу щоб змінити task.duration (крок 15 хв) */
+function attachTaskResize(tEl, task){
+  const handle = tEl.querySelector(".wt-resize");
+  if (!handle) return;
+  handle.addEventListener("pointerdown",(ev)=>{
+    if (ev.button !== 0) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+    const startY = ev.clientY;
+    const origDuration = task.duration;
+    handle.setPointerCapture?.(ev.pointerId);
+    const onMove = (e)=>{
+      const dy = e.clientY - startY;
+      const dmin = Math.round(dy / HOUR_H * 60 / 15) * 15; // крок 15 хв
+      const newDur = Math.max(15, origDuration + dmin);
+      task.duration = newDur;
+      // Оновлення візуальної висоти без повного ре-рендера
+      const h = Math.max(14, Math.round(newDur * (HOUR_H/60)));
+      tEl.style.height = h + "px";
+      tEl.style.flex = `0 0 ${h}px`;
+      const tsEl = tEl.querySelector(".ts");
+      if (tsEl) tsEl.textContent = newDur + "m";
+    };
+    const onUp = ()=>{
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      tEl.closest(".wblock")._suppressClick = true;
+      persist(); renderWeek();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   });
 }
 

@@ -3242,7 +3242,9 @@ document.getElementById("weekGrid").addEventListener("dblclick",(e)=>{
     end:   hhmmFromMinutes(mins+60),
     title: "Neuer Block",
     color: null,
-    weekId: null
+    // За замовчуванням — звичайний блок тільки для цього тижня (суцільна рамка).
+    // Користувач може змінити на template через редактор (опція "Jede Woche").
+    weekId: state.weekStart
   };
   state.blocks.push(b);
   persist(); renderWeek();

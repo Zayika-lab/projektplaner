@@ -749,6 +749,18 @@
   .wblock .wb-task:hover{ border-color: var(--ink-3); background: var(--bg-soft) }
   .wblock .wb-task .ts{ color: var(--ink-4); font-variant-numeric: tabular-nums; font-size: 9.5px; flex: 0 0 auto }
   .wblock .wb-task .tt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+  /* Кнопка "×" для швидкого викидання завдання з блоку (повертає у список) */
+  .wblock .wb-task .tx{
+    flex: 0 0 auto;
+    width: 14px; height: 14px;
+    display: none; align-items: center; justify-content: center;
+    border-radius: 3px;
+    color: var(--ink-4);
+    font-size: 12px;
+    line-height: 1;
+  }
+  .wblock .wb-task:hover .tx{ display: inline-flex }
+  .wblock .wb-task .tx:hover{ background: var(--ink); color: #fff }
   .wblock .wb-task.done{ opacity: 0.55 }
   .wblock .wb-task.done .tt{ text-decoration: line-through; color: var(--ink-4)}
   /* Spacer — "минуле" у блоці до лінії часу: штрихований фон */
@@ -2430,6 +2442,9 @@ document.getElementById("ganttRows").addEventListener("dblclick",(e)=>{
 
 const HOUR_START = 6, HOUR_END = 22;
 const HOUR_H = 52;
+// Висота заголовку блоку (wb-head) — компенсується у spacer,
+// щоб task-міні-блок починався рівно на часовій лінії
+const WB_HEAD_HEIGHT = 26;
 
 function renderWeek(){
   // Перебудовуємо кеш розподілу ланцюжків при кожному рендері
@@ -2553,18 +2568,23 @@ function renderWeekBlock(col, block, date){
       <div class="wb-time">${block.start}–${block.end}</div>
     </div>
     <div class="wb-body">
-      ${fill.items.map(it=>{
-        // Кожен item (spacer або task) отримує висоту пропорційну до хвилин
-        const h = Math.max(14, Math.round(it.mins * (HOUR_H/60)));
+      ${fill.items.map((it, idx)=>{
+        // Висота елемента пропорційна до хвилин
+        let h = Math.round(it.mins * (HOUR_H/60));
         if (it._spacer){
+          // Якщо перший item — spacer, компенсуємо висоту заголовку wb-head,
+          // щоб наступний task починався САМЕ під лінією часу (а не після head+spacer)
+          if (idx === 0) h = Math.max(0, h - WB_HEAD_HEIGHT);
+          if (h <= 0) return "";
           return `<div class="wb-spacer" style="height:${h}px;flex:0 0 ${h}px"></div>`;
         }
-        // Task-міні-блок: якщо колір проекту — підфарбовуємо ліву смужку
+        h = Math.max(14, h);
         const side = it.color ? `box-shadow: inset 3px 0 0 ${it.color}; padding-left: 9px;` : "";
         return `
           <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}" style="height:${h}px;flex:0 0 ${h}px;${side}">
             <span class="ts">${it.mins}m</span>
             <span class="tt">${escapeHtml(it.title)}</span>
+            <span class="tx" data-act="detach" title="Aus Block entfernen">×</span>
           </div>
         `;
       }).join("")}
@@ -2576,6 +2596,19 @@ function renderWeekBlock(col, block, date){
   // Клік: редагувати задачу всередині (блок — тільки по dblclick)
   el.addEventListener("click",(e)=>{
     if (el._suppressClick){ el._suppressClick = false; return; }
+    // Кнопка "×" всередині task — викидає task з блоку назад у список
+    const tx = e.target.closest(".tx");
+    if (tx && tx.dataset.act === "detach"){
+      const taskEl = tx.closest(".wb-task");
+      const tid = taskEl?.dataset.taskId;
+      const t = state.tasks.find(x=>x.id===tid);
+      if (t){
+        t.blockId = null;
+        delete t.startMinInBlock;
+        persist(); renderWeek(); renderTaskList();
+      }
+      return;
+    }
     if (e.target.closest(".wb-task")){
       const tid = e.target.closest(".wb-task").dataset.taskId;
       const t = state.tasks.find(x=>x.id===tid);
@@ -2641,19 +2674,19 @@ function buildFillCache(){
     const chain = getBlocksForWeek(title);
     chain.forEach(b=>{ cache.blocks[b.id] = { items: [], used: 0 }; });
     if (!chain.length) return;
-    // Формуємо чергу: для кожного блоку — його власні task'и (FIFO в порядку ланцюжка)
-    const queue = [];
-    chain.forEach(b=>{
-      const own = state.tasks.filter(t =>
-        !t.done && t.weekId === state.weekStart && t.blockId === b.id
-      );
-      own.forEach(t => queue.push({...t, originBlock: b.id, originTitle: b.title}));
-    });
-    // Пакуємо ланцюжок: кожен блок бере з queue доки не заповниться
+    // Кожна задача починається у СВОЄМУ блоці. Залишок (overflow) передається у наступний
+    // блок ланцюжка. Це важливо: task у block2 НЕ «повертається» до block1.
+    let overflow = [];
     for (const b of chain){
       const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
-      // Spacer — якщо перша-черга-задача саме для цього блоку має startMinInBlock
-      const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.originBlock === b.id);
+      const own = state.tasks
+        .filter(t => !t.done && t.weekId === state.weekStart && t.blockId === b.id)
+        .map(t => ({...t, originBlock: b.id, originTitle: b.title}));
+      // Черга блока: спершу overflow з попереднього, потім власні задачі
+      const queue = overflow.concat(own);
+      overflow = [];
+      // Spacer — якщо серед власних задач блока є одна з позначкою startMinInBlock
+      const dropAtNow = own.find(t=>t.startMinInBlock != null);
       if (dropAtNow){
         const offset = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
         cache.blocks[b.id].used = offset;
@@ -2668,15 +2701,16 @@ function buildFillCache(){
         cache.blocks[b.id].items.push({...t, mins:take, overflow: t.originBlock !== b.id});
         cache.blocks[b.id].used += take;
         if (take < t.duration){
-          // Залишок — у наступний блок ланцюжка (тої ж назви)
+          // Залишок — у overflow для наступного блока ланцюжка
           queue.unshift({...t, duration: t.duration-take, overflowed:true,
             title: t.title + (t.title.endsWith(" ↵") ? "" : " ↵")});
           break;
         }
       }
+      // Все, що залишилось у черзі — передаємо далі
+      overflow = queue;
     }
-    // queue може залишатися непорожньою — це сигнал що не вистачило місця.
-    // Ми не помічаємо це тут (перевірка відбувається у drop-handler окремо).
+    // Якщо overflow непорожня — це означає, що не вистачило місця (drop-handler це вже перевіряє)
   });
   return cache;
 }

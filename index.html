@@ -820,15 +820,17 @@
     margin-left: 6px;
   }
   .wblock .wb-body{
-    padding: 3px 5px 5px;
+    /* Без padding-top/bottom і gap — щоб spacer висотою offsetPx
+       точно співпав з позицією лінії часу (task починається рівно на лінії). */
+    padding: 0 5px;
     display:flex; flex-direction: column;
-    gap: 3px;
+    gap: 0;
     position: relative;
-    /* Дозволяємо винесеним назвам (.tt-outside) вилазити за межі — без цього
-       підпис маленького task ховається overflow:hidden */
     overflow: visible;
     flex:1;
   }
+  /* Невеликий проміжок між task-блоками задаємо через margin, не gap */
+  .wblock .wb-task + .wb-task{ margin-top: 2px }
   /* Task як міні-блок усередині блоку: рамка, фон, пропорційна висота за хвилинами */
   .wblock .wb-task{
     font-size: 10.5px;

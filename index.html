@@ -726,22 +726,42 @@
     margin-left: 6px;
   }
   .wblock .wb-body{
-    padding: 2px 7px 4px;
+    padding: 3px 5px 5px;
     display:flex; flex-direction: column;
-    gap: 1px;
+    gap: 3px;
     position: relative;
     overflow: hidden;
     flex:1;
   }
+  /* Task як міні-блок усередині блоку: рамка, фон, пропорційна висота за хвилинами */
   .wblock .wb-task{
     font-size: 10.5px;
-    color: var(--ink-2);
-    display:flex; align-items:center; gap: 4px;
-    padding: 1px 0;
+    color: var(--ink);
+    display:flex; align-items:flex-start; gap: 4px;
+    padding: 3px 6px;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.04);
   }
-  .wblock .wb-task .ts{ color: var(--ink-4); font-variant-numeric: tabular-nums; font-size: 9.5px }
-  .wblock .wb-task .tt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .wblock .wb-task:hover{ border-color: var(--ink-3); background: var(--bg-soft) }
+  .wblock .wb-task .ts{ color: var(--ink-4); font-variant-numeric: tabular-nums; font-size: 9.5px; flex: 0 0 auto }
+  .wblock .wb-task .tt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+  .wblock .wb-task.done{ opacity: 0.55 }
   .wblock .wb-task.done .tt{ text-decoration: line-through; color: var(--ink-4)}
+  /* Spacer — "минуле" у блоці до лінії часу: штрихований фон */
+  .wblock .wb-spacer{
+    flex: 0 0 auto;
+    background: repeating-linear-gradient(
+      -45deg,
+      rgba(130,130,130,0.14) 0 6px,
+      transparent 6px 12px
+    );
+    border-radius: 3px;
+    pointer-events: none;
+  }
   .wblock .wb-cap{
     position: absolute; bottom: 2px; right: 6px;
     font-size: 9px; color: var(--ink-4);
@@ -750,6 +770,16 @@
   .wblock.drop-target{
     outline: 2px dashed var(--ink);
     outline-offset: -2px;
+  }
+  /* Миготіння червоним — коли task не влазить у ланцюжок блоків з тою ж назвою */
+  @keyframes flashRed {
+    0%   { background: rgba(200,74,58,0.0); border-color: var(--line-strong); }
+    30%  { background: rgba(200,74,58,0.35); border-color: var(--now); }
+    100% { background: rgba(200,74,58,0.0); border-color: var(--line-strong); }
+  }
+  .wblock.flash-red{
+    animation: flashRed 0.7s ease-out 1;
+    border-color: var(--now) !important;
   }
 
   /* ========== Task list ========== */
@@ -2402,6 +2432,8 @@ const HOUR_START = 6, HOUR_END = 22;
 const HOUR_H = 52;
 
 function renderWeek(){
+  // Перебудовуємо кеш розподілу ланцюжків при кожному рендері
+  invalidateFillCache();
   const ws = parseISO(state.weekStart);
   const today = new Date(); today.setHours(0,0,0,0);
   const head = document.getElementById("weekHead");
@@ -2522,15 +2554,17 @@ function renderWeekBlock(col, block, date){
     </div>
     <div class="wb-body">
       ${fill.items.map(it=>{
-        // spacer: пропорційна до хвилин висота (1 хв = HOUR_H/60 px), без тексту
+        // Кожен item (spacer або task) отримує висоту пропорційну до хвилин
+        const h = Math.max(14, Math.round(it.mins * (HOUR_H/60)));
         if (it._spacer){
-          const h = Math.round(it.mins * (HOUR_H/60));
           return `<div class="wb-spacer" style="height:${h}px;flex:0 0 ${h}px"></div>`;
         }
+        // Task-міні-блок: якщо колір проекту — підфарбовуємо ліву смужку
+        const side = it.color ? `box-shadow: inset 3px 0 0 ${it.color}; padding-left: 9px;` : "";
         return `
-          <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}">
+          <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}" style="height:${h}px;flex:0 0 ${h}px;${side}">
             <span class="ts">${it.mins}m</span>
-            <span class="tt" style="color:${it.color||'var(--ink-2)'}">${escapeHtml(it.title)}</span>
+            <span class="tt">${escapeHtml(it.title)}</span>
           </div>
         `;
       }).join("")}
@@ -2580,85 +2614,115 @@ function hexWithAlpha(hex, alpha){
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/* Fill calculation: a block gets tasks that are assigned to it OR overflow from earlier blocks on the same day */
-function computeBlockFill(block, date){
-  const dateISO = iso(date);
-  const capacity = minutesFromHHMM(block.end) - minutesFromHHMM(block.start);
-
-  // Gather tasks assigned to blocks on this same day (including overflow chain)
-  // For simplicity: tasks with blockId set use that block primarily but can overflow.
-  // We walk through blocks for this day sorted by start, filling each.
-  const dow = (date.getDay()+6)%7;
-  const blocksForDay = getBlocksForDay(dow, dateISO).slice().sort((a,b)=>minutesFromHHMM(a.start)-minutesFromHHMM(b.start));
-
-  // Collect tasks that should be placed in this week (weekId = state.weekStart) and are assigned to any block of this day.
-  const relevantTasks = state.tasks.filter(t => t.weekId === state.weekStart && t.blockId && blocksForDay.some(b=>b.id===t.blockId) && !t.done);
-
-  // Збираємо черги завдань, окремо для кожного title-блоку
-  // Ключ: title оригінального блоку. Overflow може йти тільки в блок з ТАКИМ САМИМ title.
-  const queuesByTitle = {}; // title -> [{task, origin block}]
-  blocksForDay.forEach(b=>{
-    const tasks = relevantTasks.filter(t=>t.blockId===b.id);
-    queuesByTitle[b.title] ||= [];
-    tasks.forEach(t=>queuesByTitle[b.title].push({...t, originBlock:b.id, originTitle: b.title}));
-  });
-
-  // Розподіл по блоках. Кожен блок витягує завдання лише зі своєї черги (за title).
-  // Якщо блок цього типу повний, залишок переходить у НАСТУПНИЙ блок з ТИМ САМИМ title.
-  const blockItems = {}; // blockId -> items
-  const blockUsed  = {}; // blockId -> minutes consumed
-  blocksForDay.forEach(b=>{ blockItems[b.id]=[]; blockUsed[b.id]=0; });
-
-  for (const b of blocksForDay){
-    const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
-    const queue = queuesByTitle[b.title] || [];
-    // Резервуємо позицію поточного часу: якщо хоча б одне завдання у черзі має startMinInBlock,
-    // обрізаємо початок блоку (заповнення починається з цієї позиції)
-    const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.blockId === b.id);
-    if (dropAtNow){
-      const offset = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
-      blockUsed[b.id] = offset;
-      // Додаємо spacer-елемент, щоб task візуально починалась від полоси часу, а не з верху блоку
-      if (offset > 0){
-        blockItems[b.id].push({ _spacer: true, mins: offset, id: "_sp_"+b.id, title: "", done: false });
-      }
-    }
-    // Беремо завдання з черги цього title (FIFO)
-    while (queue.length && blockUsed[b.id] < cap){
-      const t = queue.shift();
-      const free = cap - blockUsed[b.id];
-      const take = Math.min(free, t.duration);
-      blockItems[b.id].push({...t, mins:take, overflow: t.originBlock !== b.id});
-      blockUsed[b.id] += take;
-      if (take < t.duration){
-        // Залишок переходить у наступний блок з тим же title (через ту саму чергу)
-        queue.unshift({...t, duration: t.duration-take, overflowed:true, title: t.title + (t.title.endsWith(" ↵")?"":" ↵") });
-        break;
-      }
-    }
+/* Повертає ВСІ блоки тижня з заданим title, відсортовані за (dow, start).
+   Враховує логіку template/override через getBlocksForDay(). */
+function getBlocksForWeek(title){
+  const chain = [];
+  const ws = parseISO(state.weekStart);
+  for (let d=0; d<7; d++){
+    const dayISO = iso(addDays(ws, d));
+    const dayBlocks = getBlocksForDay(d, dayISO).filter(b=>b.title === title);
+    dayBlocks.forEach(b => chain.push(b));
   }
+  chain.sort((a,b)=>(a.dow - b.dow) || (minutesFromHHMM(a.start) - minutesFromHHMM(b.start)));
+  return chain;
+}
 
-  // Tasks without a block but assigned to this day (via blockId matching "virtual" — not implemented). Skipped.
-
-  const items = (blockItems[block.id]||[]).map(it=>{
-    // spacer: прозорий елемент до позиції полоси часу; пропорційна висота за хвилинами
-    if (it._spacer){
-      return { _spacer: true, mins: it.mins, id: it.id };
+/* Кеш розподілу завдань по блоках — розраховується ОДИН раз на цикл renderWeek
+   і заповнюється всіх ланцюжків (по title). Ключ — block.id → items/used. */
+let _fillCache = null;
+function invalidateFillCache(){ _fillCache = null; }
+function buildFillCache(){
+  const cache = { blocks: {} };
+  // Групуємо блоки за title (весь тиждень, у правильному порядку)
+  const titles = new Set();
+  state.blocks.forEach(b=>titles.add(b.title));
+  titles.forEach(title=>{
+    const chain = getBlocksForWeek(title);
+    chain.forEach(b=>{ cache.blocks[b.id] = { items: [], used: 0 }; });
+    if (!chain.length) return;
+    // Формуємо чергу: для кожного блоку — його власні task'и (FIFO в порядку ланцюжка)
+    const queue = [];
+    chain.forEach(b=>{
+      const own = state.tasks.filter(t =>
+        !t.done && t.weekId === state.weekStart && t.blockId === b.id
+      );
+      own.forEach(t => queue.push({...t, originBlock: b.id, originTitle: b.title}));
+    });
+    // Пакуємо ланцюжок: кожен блок бере з queue доки не заповниться
+    for (const b of chain){
+      const cap = minutesFromHHMM(b.end) - minutesFromHHMM(b.start);
+      // Spacer — якщо перша-черга-задача саме для цього блоку має startMinInBlock
+      const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.originBlock === b.id);
+      if (dropAtNow){
+        const offset = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
+        cache.blocks[b.id].used = offset;
+        if (offset > 0){
+          cache.blocks[b.id].items.push({ _spacer: true, mins: offset, id: "_sp_"+b.id });
+        }
+      }
+      while (queue.length && cache.blocks[b.id].used < cap){
+        const t = queue.shift();
+        const free = cap - cache.blocks[b.id].used;
+        const take = Math.min(free, t.duration);
+        cache.blocks[b.id].items.push({...t, mins:take, overflow: t.originBlock !== b.id});
+        cache.blocks[b.id].used += take;
+        if (take < t.duration){
+          // Залишок — у наступний блок ланцюжка (тої ж назви)
+          queue.unshift({...t, duration: t.duration-take, overflowed:true,
+            title: t.title + (t.title.endsWith(" ↵") ? "" : " ↵")});
+          break;
+        }
+      }
     }
-    const p = findProject(it.projectId);
-    return { id:it.id, title:it.title, mins:it.mins, color: p?.color, done: it.done };
+    // queue може залишатися непорожньою — це сигнал що не вистачило місця.
+    // Ми не помічаємо це тут (перевірка відбувається у drop-handler окремо).
   });
-  const used = blockUsed[block.id] || 0;
+  return cache;
+}
+
+/* Сумісна функція для рендера одного блоку. Використовує кеш тижневого розподілу. */
+function computeBlockFill(block, date){
+  if (!_fillCache) _fillCache = buildFillCache();
+  const capacity = minutesFromHHMM(block.end) - minutesFromHHMM(block.start);
+  const entry = _fillCache.blocks[block.id] || { items: [], used: 0 };
+  const items = entry.items.map(it=>{
+    if (it._spacer) return { _spacer: true, mins: it.mins, id: it.id };
+    const p = findProject(it.projectId);
+    return { id: it.id, title: it.title, mins: it.mins, color: p?.color, done: it.done };
+  });
+  const used = entry.used;
   const pct = Math.min(1, used / capacity);
-  // pick dominant project color for fill
-  const firstProj = items[0] ? findProject(items[0]._pid || items[0].id) : null;
+  // Колір від першого проекту у блоці
   let projectColor = null;
-  if (items.length){
-    const pid = relevantTasks.find(t=>blockItems[block.id].some(bi=>bi.id===t.id))?.projectId;
-    const pp = pid ? findProject(pid) : null;
-    projectColor = pp?.color || null;
+  const firstTask = entry.items.find(it=>!it._spacer);
+  if (firstTask){
+    const p = findProject(firstTask.projectId);
+    projectColor = p?.color || null;
   }
   return { items, pct, usedMin: used, projectColor };
+}
+
+/* Перевірка: чи влізе task у ланцюжок блоків з цим title після призначення до newBlockId.
+   Повертає true якщо сумарна duration всіх tasks ≤ сумарний cap. */
+function chainFitsAfterAdding(title, task, newBlockId){
+  const chain = getBlocksForWeek(title);
+  if (!chain.some(b=>b.id === newBlockId)) return false; // цей блок не з ланцюжка
+  const totalCap = chain.reduce((s,b)=>s + (minutesFromHHMM(b.end)-minutesFromHHMM(b.start)), 0);
+  // Інші задачі у ланцюжку (не ця сама task)
+  const others = state.tasks.filter(t =>
+    !t.done && t.id !== task.id && t.weekId === state.weekStart &&
+    chain.some(b=>b.id === t.blockId)
+  );
+  const otherDur = others.reduce((s,t)=>s + t.duration, 0);
+  return (otherDur + task.duration) <= totalCap;
+}
+
+/* Миготіння блоку червоним — сигнал що task не помістилась у ланцюжок */
+function flashBlockRed(el){
+  if (!el) return;
+  el.classList.add("flash-red");
+  setTimeout(()=>el.classList.remove("flash-red"), 700);
 }
 
 /* Resize блоку: тягнемо верхній/нижній край щоб змінити start або end (крок 15 хв) */
@@ -2809,12 +2873,15 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
       if (targetBlockEl){
         const newBlockId = targetBlockEl.dataset.blockId;
         if (newBlockId && newBlockId !== task.blockId){
+          const newBlock = state.blocks.find(b=>b.id === newBlockId);
+          if (newBlock && !chainFitsAfterAdding(newBlock.title, task, newBlockId)){
+            // Не вистачає місця у ланцюжку з тою ж назвою — миготимо червоним
+            flashBlockRed(targetBlockEl);
+            return;
+          }
           task.blockId = newBlockId;
           task.weekId  = state.weekStart;
-          // При drop у блок з поточним часом — фіксуємо позицію
           maybeSetDropAtNow(task, newBlockId);
-          // Якщо task не вміщається — створити додатковий блок з тим же title
-          ensureOverflowBlock(task, newBlockId);
           persist(); renderWeek(); renderTaskList();
         }
       } else {
@@ -3094,12 +3161,15 @@ function attachTaskDrag(el, t){
       if (block){
         const b = state.blocks.find(x=>x.id===block.dataset.blockId);
         if (b){
+          // Перевірка: чи влізе task у ланцюжок блоків з тою ж назвою (весь тиждень)
+          if (!chainFitsAfterAdding(b.title, t, b.id)){
+            // Не вистачає місця — миготимо червоним, не призначаємо
+            flashBlockRed(block);
+            return;
+          }
           t.blockId = b.id;
           t.weekId = state.weekStart;
-          // Якщо drop у блок з поточним часом — починаємо з позиції шкали часу
           maybeSetDropAtNow(t, b.id);
-          // Якщо task не вміщається — створити додатковий блок з тим же title
-          ensureOverflowBlock(t, b.id);
           persist(); renderWeek(); renderTaskList();
           return;
         }

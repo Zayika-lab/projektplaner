@@ -185,6 +185,64 @@
     border: 0;
   }
 
+  /* ===== Підказки для новачків (tooltip-bubbles) ===== */
+  .tip-layer{
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 900;
+  }
+  .tip-bubble{
+    position: absolute;
+    pointer-events: auto;
+    background: #111;
+    color: #fff;
+    border-radius: 8px;
+    padding: 8px 28px 8px 12px;
+    font-size: 12px;
+    line-height: 1.35;
+    max-width: 240px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    animation: tipFadeIn .25s ease-out;
+  }
+  @keyframes tipFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tip-bubble::before{
+    content: "";
+    position: absolute;
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+  }
+  .tip-bubble.arrow-up::before{
+    top: -5px; left: 14px;
+    border-bottom: 6px solid #111;
+  }
+  .tip-bubble.arrow-down::before{
+    bottom: -5px; left: 14px;
+    border-top: 6px solid #111;
+  }
+  .tip-bubble.arrow-left::before{
+    left: -5px; top: 10px;
+    border-left: 0;
+    border-right: 6px solid #111;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+  }
+  .tip-bubble .tip-close{
+    position: absolute;
+    right: 6px; top: 4px;
+    width: 16px; height: 16px;
+    display: inline-flex; align-items:center; justify-content:center;
+    border-radius: 3px;
+    color: rgba(255,255,255,0.6);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .tip-bubble .tip-close:hover{ color: #fff; background: rgba(255,255,255,0.12) }
+
   /* ===== Кнопка налаштувань ===== */
   .settings-btn{
     width: 28px; height: 28px;
@@ -1167,6 +1225,9 @@
   <div class="modal" id="modalBox"></div>
 </div>
 
+<!-- Шар підказок (туторіал для нових користувачів) -->
+<div class="tip-layer" id="tipLayer"></div>
+
 <!-- =============================================================
      SCRIPT
      ============================================================= -->
@@ -1355,7 +1416,26 @@ const PALETTE = ["#6f8f7b","#7b93b3","#b38672","#9686aa","#b09451","#a86f78","#5
 
 const uid = () => Math.random().toString(36).slice(2,10);
 
+// Порожній стартовий стан — без демо-даних. Нові користувачі починають з чистого.
 function defaultState(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = addDays(today, -3);
+  return {
+    projects: [],
+    ganttTasks: [],
+    blocks: [],
+    tasks: [],
+    selectedProjectId: null,
+    ganttStart: iso(start),
+    weekStart: iso(mondayOf(today)),
+    calCursor: iso(today),
+    settings: { tipsEnabled: true, dayStart: 6, dayEnd: 22 },
+    version: 1,
+  };
+}
+
+// Демо-стан (не використовується за замовчуванням). Лишили для довідки.
+function _defaultStateWithDemo(){
   const today = new Date(); today.setHours(0,0,0,0);
   const start = addDays(today, -3);
 
@@ -1573,6 +1653,7 @@ function setView(v){
   if (v==="gantt") renderGantt();
   if (v==="week") renderWeek();
   if (v==="calendar") renderCalendar();
+  setTimeout(()=>renderTips(), 0);
 }
 
 function render(){
@@ -1583,6 +1664,8 @@ function render(){
   renderCalendar();
   renderTaskList();
   updateStoreStatus();
+  // Підказки перераховуємо після рендеру — вони прикріплені до позицій DOM-елементів
+  setTimeout(()=>renderTips(), 0);
 }
 
 function updateStoreStatus(){
@@ -3093,7 +3176,7 @@ function maybeSetDropAtNow(task, blockId){
 }
 
 // ═══════ Налаштування додатку ═══════
-// Відкриває модал з налаштуваннями (початок/кінець робочого дня).
+// Відкриває модал з налаштуваннями (початок/кінець робочого дня + підказки).
 function openSettings(){
   const s = state.settings || {};
   const hours = Array.from({length:25}, (_,i)=>({id:String(i), name: pad(i)+":00"}));
@@ -3102,6 +3185,16 @@ function openSettings(){
     fields: [
       { key: "dayStart", label: "Tag-Start", type: "select", value: String(s.dayStart ?? 6), options: hours.slice(0, 24) },
       { key: "dayEnd",   label: "Tag-Ende",  type: "select", value: String(s.dayEnd   ?? 22), options: hours.slice(1) },
+      { key: "tipsEnabled", label: "Hilfe-Tipps aktivieren", type: "check", value: s.tipsEnabled !== false },
+    ],
+    extraAction: [
+      {
+        label: "Alle Tipps zurücksetzen",
+        fn: ()=>{
+          state.settings = { ...(state.settings||{}), dismissedTips: [], tipsEnabled: true };
+          closeModal(); render(); persist();
+        }
+      }
     ],
     onSubmit: (v)=>{
       const ds = Number(v.dayStart), de = Number(v.dayEnd);
@@ -3109,11 +3202,93 @@ function openSettings(){
         alert("Ende muss nach Start liegen.");
         return;
       }
-      state.settings = { ...(state.settings||{}), dayStart: ds, dayEnd: de };
+      state.settings = {
+        ...(state.settings||{}),
+        dayStart: ds,
+        dayEnd: de,
+        tipsEnabled: !!v.tipsEnabled,
+      };
       closeModal(); render(); persist();
     }
   });
 }
+
+// ═══════ Система підказок для нових користувачів ═══════
+// Кожен tip має id; якщо tipsEnabled=true і tip не dismissed — показуємо bubble.
+// Клік на "×" додає id до state.settings.dismissedTips (persist).
+const TIPS = [
+  { id: "view-switcher", target: "#viewSwitcher", arrow: "up",
+    text: "Wechseln Sie zwischen Gantt, Woche und Kalender." },
+  { id: "settings-btn", target: "#settingsBtn", arrow: "up",
+    text: "Einstellungen: Tag-Start/Ende + Tipps verwalten." },
+  { id: "undo-btn", target: "#undoBtn", arrow: "up",
+    text: "Rückgängig (letzte 10 Aktionen). Shortcut: Strg+Z." },
+  { id: "gantt-empty", target: "#ganttRows", arrow: "up", viewOnly: "gantt",
+    text: "Doppelklick in eine Zeile erstellt eine neue Aufgabe. Unten steht der Button '+ Neues Projekt'." },
+  { id: "gantt-zoom", target: "#ganttZoomWrap", arrow: "up", viewOnly: "gantt",
+    text: "Mit dem Schieberegler ändern Sie die Breite der Gantt-Tage." },
+  { id: "week-grid", target: "#weekGrid", arrow: "up", viewOnly: "week",
+    text: "Doppelklick in einen Tag erstellt einen Block. Ziehen Sie Aufgaben aus der Liste links in einen Block." },
+  { id: "week-tasklist", target: "#taskList", arrow: "left", viewOnly: "week",
+    text: "Ihre Aufgaben. Ziehen Sie sie in einen Block auf der rechten Seite." },
+];
+function isTipDismissed(id){
+  const d = state.settings?.dismissedTips || [];
+  return d.includes(id);
+}
+function dismissTip(id){
+  state.settings = state.settings || {};
+  state.settings.dismissedTips = [...(state.settings.dismissedTips||[]), id];
+  persist();
+  renderTips();
+}
+function renderTips(){
+  const layer = document.getElementById("tipLayer");
+  if (!layer) return;
+  layer.innerHTML = "";
+  if (!state.settings || state.settings.tipsEnabled === false) return;
+  const currentView = state.ui?.view || "gantt";
+  TIPS.forEach(tip=>{
+    if (isTipDismissed(tip.id)) return;
+    if (tip.viewOnly && tip.viewOnly !== currentView) return;
+    const target = document.querySelector(tip.target);
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return; // елемент схований
+    const bubble = document.createElement("div");
+    bubble.className = "tip-bubble arrow-" + (tip.arrow || "up");
+    bubble.innerHTML = `${escapeHtml(tip.text)}<span class="tip-close" data-tip-id="${tip.id}">×</span>`;
+    // Позиціонування bubble відносно target-а
+    let top, left;
+    if (tip.arrow === "up"){
+      top  = rect.bottom + 10;
+      left = rect.left;
+    } else if (tip.arrow === "down"){
+      top  = rect.top - 10;
+      left = rect.left;
+    } else if (tip.arrow === "left"){
+      top  = rect.top + 10;
+      left = rect.right + 10;
+    } else {
+      top  = rect.bottom + 10;
+      left = rect.left;
+    }
+    // Не даємо вилізти за правий край екрану
+    const maxLeft = window.innerWidth - 260;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 8) left = 8;
+    bubble.style.top  = top + "px";
+    bubble.style.left = left + "px";
+    layer.appendChild(bubble);
+  });
+  // Один делегований обробник для всіх "×"
+  layer.onclick = (e)=>{
+    const btn = e.target.closest(".tip-close");
+    if (btn) dismissTip(btn.dataset.tipId);
+  };
+}
+// Оновлюємо підказки при рендері
+window.addEventListener("resize", ()=>renderTips());
 
 // Видаляє всі блоки з такою ж назвою, які йдуть ПІСЛЯ `block` у ланцюжку тижня.
 function deleteLaterBlocksWithSameTitle(block){

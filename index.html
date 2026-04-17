@@ -39,7 +39,8 @@
     --hour-h: 52px;
     --time-col-w: 60px;
 
-    --project-palette: #6f8f7b, #7b93b3, #b38672, #9686aa, #b09451, #a86f78, #547a8c, #8a8568;
+    /* Живіша, але все ще спокійна палітра (збереження мінімалізму) */
+    --project-palette: #4fa47f, #4a7fc9, #d57a4c, #a572d3, #d6a83e, #d85f7b, #2f8bd1, #8b9a3e;
   }
 
   *{box-sizing:border-box}
@@ -728,10 +729,11 @@
   .wblock{
     position: absolute;
     left: 3px; right: 3px;
+    margin-top: 18px; /* місце для заголовка, який тепер над рамкою */
     border-radius: var(--radius-sm);
     background: var(--bg-soft);
     border: 1px solid var(--line-strong);
-    overflow:hidden;
+    overflow: visible; /* дозволяємо заголовку та leader-лініям виходити за межі рамки */
     cursor: pointer;
     display:flex; flex-direction:column;
     user-select: none;
@@ -775,13 +777,20 @@
     pointer-events:none;
     transition: height .2s;
   }
+  /* Заголовок блоку — тепер НАД блоком (не займає місце всередині) */
   .wblock .wb-head{
-    padding: 4px 7px 2px;
-    display:flex; align-items: baseline; justify-content: space-between;
-    position: relative;
+    position: absolute;
+    left: 2px; right: 2px;
+    top: -16px;
+    height: 14px;
+    display:flex; align-items: center; justify-content: space-between;
+    padding: 0 4px;
+    pointer-events: none;
+    font-size: 10.5px;
+    line-height: 1;
+    background: transparent;
   }
   .wblock .wb-title{
-    font-size: 11px;
     font-weight: 500;
     color: var(--ink);
     flex:1;
@@ -818,6 +827,35 @@
   .wblock .wb-task:hover{ border-color: var(--ink-3); background: var(--bg-soft) }
   .wblock .wb-task .ts{ color: var(--ink-4); font-variant-numeric: tabular-nums; font-size: 9.5px; flex: 0 0 auto }
   .wblock .wb-task .tt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+  /* Компактний task (мала висота): назва винесена праворуч від блоку, з leader-лінією */
+  .wblock .wb-task.is-compact{
+    overflow: visible;
+    position: relative;
+  }
+  .wblock .wb-task .tt-outside{
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-size: 10px;
+    color: var(--ink-2);
+    white-space: nowrap;
+    z-index: 5;
+    pointer-events: none;
+  }
+  /* Leader-лінія від блоку до винесеної назви */
+  .wblock .wb-task.is-compact::after{
+    content: "";
+    position: absolute;
+    right: -8px; top: 50%;
+    width: 8px; height: 1px;
+    background: var(--line-strong);
+  }
   /* Кнопка "×" для швидкого викидання завдання з блоку (повертає у список) */
   .wblock .wb-task .tx{
     flex: 0 0 auto;
@@ -1412,7 +1450,8 @@ async function signOutUser(){
    2. STATE
    ═══════════════════════════════════════════════════════════════ */
 
-const PALETTE = ["#6f8f7b","#7b93b3","#b38672","#9686aa","#b09451","#a86f78","#547a8c","#8a8568"];
+// Живіша палітра — проекти/блоки отримують насичені, але спокійні кольори (sage → moss → teal → berry).
+const PALETTE = ["#4fa47f","#4a7fc9","#d57a4c","#a572d3","#d6a83e","#d85f7b","#2f8bd1","#8b9a3e"];
 
 const uid = () => Math.random().toString(36).slice(2,10);
 
@@ -2720,21 +2759,25 @@ function renderWeekBlock(col, block, date){
     </div>
     <div class="wb-body">
       ${fill.items.map((it, idx)=>{
-        // Висота елемента пропорційна до хвилин (щоб кінець співпадав з правильним часом)
+        // Висота елемента пропорційна до хвилин (заголовок блоку тепер НАД блоком,
+        // тому висоту компенсувати не треба — task займає повну пропорцію)
         let h = Math.round(it.mins * (HOUR_H/60));
-        // ПЕРШИЙ елемент (без spacer попереду) повинен компенсувати висоту заголовку
-        // wb-head: інакше task візуально "зсовується" нижче за свій реальний час-end.
-        if (idx === 0) h = Math.max(14, h - WB_HEAD_HEIGHT);
         if (it._spacer){
           if (h <= 0) return "";
           return `<div class="wb-spacer" style="height:${h}px;flex:0 0 ${h}px"></div>`;
         }
         h = Math.max(14, h);
         const side = it.color ? `box-shadow: inset 3px 0 0 ${it.color}; padding-left: 9px;` : "";
+        // Маленькі task (висотою < 28px) — назва винесена зовні справа, з leader-лінією.
+        // Всередині лишаються тільки хвилини + "×" для компактності.
+        const compact = h < 28;
+        const titleHtml = compact
+          ? `<span class="tt-outside">${escapeHtml(it.title)}</span>`
+          : `<span class="tt">${escapeHtml(it.title)}</span>`;
         return `
-          <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}" style="height:${h}px;flex:0 0 ${h}px;${side}">
+          <div class="wb-task ${it.done?'done':''} ${compact?'is-compact':''}" data-task-id="${it.id}" title="${escapeHtml(it.title)}" style="height:${h}px;flex:0 0 ${h}px;${side}">
             <span class="ts">${it.mins}m</span>
-            <span class="tt">${escapeHtml(it.title)}</span>
+            ${titleHtml}
             <span class="tx" data-act="detach" title="Aus Block entfernen">×</span>
           </div>
         `;

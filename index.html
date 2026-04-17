@@ -660,6 +660,17 @@
     z-index: 50;
     box-shadow: 0 6px 20px rgba(0,0,0,.18);
   }
+  /* Ручки для зміни розміру блоку за верх/низ */
+  .wblock .wb-resize{
+    position: absolute;
+    left: 0; right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 5;
+  }
+  .wblock .wb-resize.top{ top: 0 }
+  .wblock .wb-resize.bot{ bottom: 0 }
+  .wblock .wb-resize:hover{ background: rgba(0,0,0,0.08) }
   /* Drag handle для всього блоку — задається на wb-head; пересування мишею */
   .wblock .wb-head{ cursor: grab }
   .wblock.dragging-block .wb-head{ cursor: grabbing }
@@ -1188,7 +1199,13 @@ const Store = {
     const ref = userDocRef();
     if (!ref) return ()=>{};
     try{
-      return fdoc.onSnapshot(ref, s => { if (s.exists()) cb(s.data()); });
+      return fdoc.onSnapshot(ref, s => {
+        // Пропускаємо локальне echo — поки наша зміна ще не підтверджена сервером,
+        // subscribe може повернути старий стан і "скасувати" свіжо введене (напр. назву блоку)
+        if (s.metadata?.hasPendingWrites) return;
+        if (s.metadata?.fromCache) return;
+        if (s.exists()) cb(s.data());
+      });
     }catch(e){ return ()=>{}; }
   }
 };
@@ -2465,17 +2482,26 @@ function renderWeekBlock(col, block, date){
   el.innerHTML = `
     ${block.color ? `<div class="wb-color-bar" style="background:${block.color}"></div>` : ""}
     <div class="wb-fill" style="height:${fill.pct*100}%"></div>
+    <div class="wb-resize top" data-edge="top"></div>
+    <div class="wb-resize bot" data-edge="bot"></div>
     <div class="wb-head">
       <div class="wb-title">${escapeHtml(block.title)}</div>
       <div class="wb-time">${block.start}–${block.end}</div>
     </div>
     <div class="wb-body">
-      ${fill.items.map(it=>`
-        <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}">
-          <span class="ts">${it.mins}m</span>
-          <span class="tt" style="color:${it.color||'var(--ink-2)'}">${escapeHtml(it.title)}</span>
-        </div>
-      `).join("")}
+      ${fill.items.map(it=>{
+        // spacer: пропорційна до хвилин висота (1 хв = HOUR_H/60 px), без тексту
+        if (it._spacer){
+          const h = Math.round(it.mins * (HOUR_H/60));
+          return `<div class="wb-spacer" style="height:${h}px;flex:0 0 ${h}px"></div>`;
+        }
+        return `
+          <div class="wb-task ${it.done?'done':''}" data-task-id="${it.id}">
+            <span class="ts">${it.mins}m</span>
+            <span class="tt" style="color:${it.color||'var(--ink-2)'}">${escapeHtml(it.title)}</span>
+          </div>
+        `;
+      }).join("")}
     </div>
     ${fill.items.length ? `<div class="wb-cap">${fill.usedMin}/${endMin-startMin}m</div>` : ""}
   `;
@@ -2499,6 +2525,8 @@ function renderWeekBlock(col, block, date){
 
   // Drag самого блоку (за заголовок) — переміщення по тижневій сітці
   attachBlockDrag(el, block);
+  // Resize — перетягування верхнього/нижнього краю змінює start/end (крок 15 хв)
+  attachBlockResize(el, block);
   // Drag завдань всередині блоку — щоб переносити в інший блок
   el.querySelectorAll(".wb-task").forEach(tEl=>{
     const tid = tEl.dataset.taskId;
@@ -2552,7 +2580,12 @@ function computeBlockFill(block, date){
     // обрізаємо початок блоку (заповнення починається з цієї позиції)
     const dropAtNow = queue.find(t=>t.startMinInBlock != null && t.blockId === b.id);
     if (dropAtNow){
-      blockUsed[b.id] = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
+      const offset = Math.min(cap, Math.max(0, dropAtNow.startMinInBlock));
+      blockUsed[b.id] = offset;
+      // Додаємо spacer-елемент, щоб task візуально починалась від полоси часу, а не з верху блоку
+      if (offset > 0){
+        blockItems[b.id].push({ _spacer: true, mins: offset, id: "_sp_"+b.id, title: "", done: false });
+      }
     }
     // Беремо завдання з черги цього title (FIFO)
     while (queue.length && blockUsed[b.id] < cap){
@@ -2572,6 +2605,10 @@ function computeBlockFill(block, date){
   // Tasks without a block but assigned to this day (via blockId matching "virtual" — not implemented). Skipped.
 
   const items = (blockItems[block.id]||[]).map(it=>{
+    // spacer: прозорий елемент до позиції полоси часу; пропорційна висота за хвилинами
+    if (it._spacer){
+      return { _spacer: true, mins: it.mins, id: it.id };
+    }
     const p = findProject(it.projectId);
     return { id:it.id, title:it.title, mins:it.mins, color: p?.color, done: it.done };
   });
@@ -2586,6 +2623,46 @@ function computeBlockFill(block, date){
     projectColor = pp?.color || null;
   }
   return { items, pct, usedMin: used, projectColor };
+}
+
+/* Resize блоку: тягнемо верхній/нижній край щоб змінити start або end (крок 15 хв) */
+function attachBlockResize(el, block){
+  el.querySelectorAll(".wb-resize").forEach(handle=>{
+    handle.addEventListener("pointerdown",(ev)=>{
+      if (ev.button !== 0) return;
+      ev.stopPropagation();
+      const edge = handle.dataset.edge; // "top" або "bot"
+      const startY = ev.clientY;
+      const origStart = minutesFromHHMM(block.start);
+      const origEnd   = minutesFromHHMM(block.end);
+      handle.setPointerCapture?.(ev.pointerId);
+
+      const onMove = (e)=>{
+        const dy = e.clientY - startY;
+        const dmin = Math.round(dy / HOUR_H * 60 / 15) * 15; // крок 15 хв
+        if (edge === "top"){
+          const newStart = Math.max(0, Math.min(origEnd - 15, origStart + dmin));
+          block.start = hhmmFromMinutes(newStart);
+        } else {
+          const newEnd = Math.max(origStart + 15, Math.min(24*60, origEnd + dmin));
+          block.end = hhmmFromMinutes(newEnd);
+        }
+        // Live-оновлення позиції/висоти без повного rerender
+        const top = (minutesFromHHMM(block.start) - HOUR_START*60)/60 * HOUR_H;
+        const height = (minutesFromHHMM(block.end) - minutesFromHHMM(block.start))/60 * HOUR_H;
+        el.style.top = top + "px";
+        el.style.height = height + "px";
+      };
+      const onUp = ()=>{
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        el._suppressClick = true;
+        persist(); renderWeek();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+  });
 }
 
 /* Drag блоку: перетягуємо за wb-head, змінюємо dow та start/end (зберігаючи тривалість) */
@@ -2689,6 +2766,7 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
       blockEl._suppressClick = true;
       const below = document.elementFromPoint(e.clientX, e.clientY);
       const targetBlockEl = below?.closest(".wblock");
+      const taskListArea  = below?.closest("#taskList");
       if (targetBlockEl){
         const newBlockId = targetBlockEl.dataset.blockId;
         if (newBlockId && newBlockId !== task.blockId){
@@ -2698,6 +2776,11 @@ function attachInBlockTaskDrag(tEl, task, blockEl){
           maybeSetDropAtNow(task, newBlockId);
           persist(); renderWeek(); renderTaskList();
         }
+      } else {
+        // Drop поза блоком (у список задач або просто на порожнє місце) → відв'язуємо
+        task.blockId = null;
+        delete task.startMinInBlock;
+        persist(); renderWeek(); renderTaskList();
       }
     };
     window.addEventListener("pointermove", onMove);
@@ -2743,6 +2826,23 @@ function editBlock(block){
       // Відв'язуємо задачі від видаленого блоку
       state.tasks.forEach(t=>{ if (t.blockId===block.id) t.blockId = null; });
       closeModal(); renderWeek(); persist();
+    },
+    // Додаткова кнопка: копіює поточний блок на наступний день (dow+1, обгортка на 6 → 0)
+    extraAction: {
+      label: "→ Auf nächsten Tag kopieren",
+      fn: ()=>{
+        const nextDow = (block.dow + 1) % 7;
+        state.blocks.push({
+          id: uid(),
+          dow: nextDow,
+          start: block.start,
+          end: block.end,
+          title: block.title,
+          color: block.color || null,
+          weekId: block.weekId,
+        });
+        closeModal(); renderWeek(); persist();
+      }
     },
     onSubmit:(v)=>{
       block.title = v.title.trim() || block.title;
@@ -3133,9 +3233,8 @@ function openModal({ title, fields, onSubmit, onDelete, extraAction }){
   setTimeout(()=>box.querySelector("input, select, textarea")?.focus(), 50);
 }
 function closeModal(){ document.getElementById("modalRoot").classList.remove("open"); }
-document.getElementById("modalRoot").addEventListener("click",(e)=>{
-  if (e.target.id==="modalRoot") closeModal();
-});
+// Модал закривається ЛИШЕ через кнопку (Abbrechen/Speichern) або Escape.
+// Клік поза модалом НЕ закриває його (запобігаємо випадковій втраті введених даних).
 window.addEventListener("keydown",(e)=>{ if (e.key==="Escape") closeModal(); });
 
 function fieldHtml(f){
